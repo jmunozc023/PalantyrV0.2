@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Palantyr.Host</RootNamespace>
+    <AssemblyName>Palantyr.Host</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Palantyr.Contracts\Palantyr.Contracts.csproj" />
+    <ProjectReference Include="..\Palantyr.Domain\Palantyr.Domain.csproj" />
+    <ProjectReference Include="..\Palantyr.Audio\Palantyr.Audio.csproj" />
+    <ProjectReference Include="..\Palantyr.Data.Raven\Palantyr.Data.Raven.csproj" />
+    <ProjectReference Include="..\Palantyr.AI.Orchestration\Palantyr.AI.Orchestration.csproj" />
+  </ItemGroup>
+</Project>
