@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Palantyr.AI.Orchestration</RootNamespace>
+    <AssemblyName>Palantyr.AI.Orchestration</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Palantyr.Contracts\Palantyr.Contracts.csproj" />
+    <ProjectReference Include="..\Palantyr.Domain\Palantyr.Domain.csproj" />
+  </ItemGroup>
+</Project>

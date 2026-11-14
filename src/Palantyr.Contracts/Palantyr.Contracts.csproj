@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Palantyr.Contracts</RootNamespace>
+    <AssemblyName>Palantyr.Contracts</AssemblyName>
+  </PropertyGroup>
+</Project>

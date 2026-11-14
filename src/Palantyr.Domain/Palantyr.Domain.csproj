@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Palantyr.Domain</RootNamespace>
+    <AssemblyName>Palantyr.Domain</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Palantyr.Contracts\Palantyr.Contracts.csproj" />
+  </ItemGroup>
+</Project>
