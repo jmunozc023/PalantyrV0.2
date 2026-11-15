@@ -1,4 +1,8 @@
+// Vite is resolved at runtime by the build tool; allow type-checking when its
+// package declarations are unavailable in the current workspace.
+// @ts-expect-error -- vite is an optional build-time dependency in this context.
 import { defineConfig } from 'vite';
+// @ts-expect-error -- Vite's React plugin is an optional build-time dependency in this context.
 import react from '@vitejs/plugin-react';
 
 // NFR-PRIV-005: 100% local offline-first configuration.
