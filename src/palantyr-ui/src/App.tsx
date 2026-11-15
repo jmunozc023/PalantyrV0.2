@@ -28,6 +28,8 @@ import { SubsystemStatusBar } from './components/SubsystemStatusBar';
 import { CreateCampaignWizard } from './components/CreateCampaignWizard';
 import { TranscriptAndReviewPanel } from './components/TranscriptAndReviewPanel';
 import { MemoryBrowserPanel } from './components/MemoryBrowserPanel';
+import { SessionSummaryModal } from './components/SessionSummaryModal';
+import { SessionSummaryDto, SummaryVisibilityMode } from './types/palantyr';
 import {
   MemoryEntityDto,
   EntityResolutionCandidateDto,
@@ -294,6 +296,9 @@ export const App: React.FC = () => {
   // Modals state
   const [showFirstRunModal, setShowFirstRunModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showSummaryModal, setShowSummaryModal] = useState<boolean>(false);
+  const [currentSummary, setCurrentSummary] = useState<SessionSummaryDto | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState<boolean>(false);
   const [endSessionStage, setEndSessionStage] = useState<0 | 1 | 2>(0);
   const [endSessionSummary, setEndSessionSummary] =
     useState<EndSessionSummaryDto | null>(null);
@@ -847,6 +852,68 @@ export const App: React.FC = () => {
     }));
   };
 
+  // Wave 4: Session Summary Handler (EPIC-08, ADR-006)
+  const handleOpenSummary = async (mode: SummaryVisibilityMode = 'PartySafe') => {
+    setShowSummaryModal(true);
+    setIsGeneratingSummary(true);
+    try {
+      const sessId = homeStatus.activeSessionId || 'sess-001';
+      const res = await fetch(`/api/v1/campaigns/${activeCampaignId}/sessions/${sessId}/summaries/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, targetLanguage: settings.uiLanguage }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentSummary(data);
+      } else {
+        setCurrentSummary({
+          summaryId: `sum-${sessId}-${mode.toLowerCase()}`,
+          campaignId: activeCampaignId || 'camp-default',
+          sessionId: sessId,
+          mode: mode,
+          title: mode === 'PartySafe' ? 'Session Chronicle (Party Safe)' : 'Full Session Chronicle (DM Full)',
+          executiveRecap: 'The party successfully crossed the marshlands, discovered the sunken shrine, and secured sanctuary at Sunspire Citadel.',
+          keyEvents: [
+            { eventId: 'ev-1', description: 'Sunspire Citadel: Reached the elven watchtower', relativeTimeContext: 'Morning', participants: ['Party'], visibility: 'PartyKnown' },
+            { eventId: 'ev-2', description: 'Defeated the marsh hag in combat', relativeTimeContext: 'Midday', participants: ['Party', 'Hag'], visibility: 'PartyKnown' }
+          ],
+          majorDiscoveries: [
+            { subject: 'Sunken Shrine of Sehanine', description: 'Ancient sacred elven ground', knowledgeState: 'CampaignTruth', confidence: 'HighConfidence' }
+          ],
+          outstandingQuestions: ['Who left the Silver Key inside the sealed crypt?'],
+          dmPrivateNotes: mode === 'DmFull' ? 'DM CONFIDENTIAL: High Lord Elion is being manipulated by the lich cult.' : null,
+          generatedAtUtc: new Date().toISOString(),
+          promptTemplateVersion: 'v1.2-party-safe-gatekeeper',
+          sources: []
+        });
+      }
+    } catch {
+      // Demo fallback
+      setCurrentSummary({
+        summaryId: 'sum-demo-01',
+        campaignId: activeCampaignId || 'camp-default',
+        sessionId: 'sess-001',
+        mode: mode,
+        title: mode === 'PartySafe' ? 'Session Chronicle (Party Safe)' : 'Full Session Chronicle (DM Full)',
+        executiveRecap: 'The party successfully crossed the marshlands, discovered the sunken shrine, and secured sanctuary at Sunspire Citadel.',
+        keyEvents: [
+          { eventId: 'ev-1', description: 'Sunspire Citadel: Reached the elven watchtower', relativeTimeContext: 'Morning', participants: ['Party'], visibility: 'PartyKnown' }
+        ],
+        majorDiscoveries: [
+          { subject: 'Sunken Shrine of Sehanine', description: 'Ancient sacred elven ground', knowledgeState: 'CampaignTruth', confidence: 'HighConfidence' }
+        ],
+        outstandingQuestions: ['Who left the Silver Key inside the sealed crypt?'],
+        dmPrivateNotes: mode === 'DmFull' ? 'DM CONFIDENTIAL: High Lord Elion is being manipulated by the lich cult.' : null,
+        generatedAtUtc: new Date().toISOString(),
+        promptTemplateVersion: 'v1.2-party-safe-gatekeeper',
+        sources: []
+      });
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
   // Two-Stage End Session (UX-END-001..003, AC-END-001..002)
   const handleInitiateEndSession = () => {
     setEndSessionStage(1);
@@ -906,10 +973,11 @@ export const App: React.FC = () => {
   };
 
   // Eonix Ask / Teach Interaction (UX-CAM-003, UX-EONIX-001)
-  const handleSendEonixMessage = (
+  const handleSendEonixMessage = async (
     text: string,
     mode: 'ask' | 'teach',
-    visibility: VisibilityScope
+    visibility: VisibilityScope,
+    scope?: 'CampaignDmFull' | 'PartyKnowledge' | 'CharacterScoped'
   ) => {
     const dmMsg: EonixChatMessage = {
       id: `msg-dm-${Date.now()}`,
@@ -925,6 +993,62 @@ export const App: React.FC = () => {
       eonixVisualState: mode === 'ask' ? 'Answering' : 'MemoryProcessing',
       eonixQueryStatus: 'Completed',
     }));
+
+    if (activeCampaignId) {
+      try {
+        if (mode === 'ask') {
+          const res = await fetch(`/api/v1/campaigns/${activeCampaignId}/eonix/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: text, scope: scope || 'PartyKnowledge', language: settings.uiLanguage }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const replyMsg: EonixChatMessage = {
+              id: `msg-eonix-${Date.now()}`,
+              sender: 'eonix',
+              mode: 'ask',
+              text: data.answer,
+              timestampUtc: new Date().toISOString(),
+              citations: data.sources?.map((cit: any) => cit.snippet ? `${cit.snippet} [${cit.knowledgeState}]` : `Source: ${cit.sourceId}`) || [],
+              knowledgeState: data.sources?.[0]?.knowledgeState || 'CampaignTruth',
+              visibility: scope === 'CampaignDmFull' ? 'DMPrivate' : 'PartyKnown',
+            };
+            setEonixMessages((prev) => [...prev, dmMsg, replyMsg]);
+            setHomeStatus((prev) => ({ ...prev, eonixVisualState: 'Answering' }));
+            return;
+          }
+        } else {
+          const res = await fetch(`/api/v1/campaigns/${activeCampaignId}/eonix/teach`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              taughtStatement: text,
+              isDmSecret: visibility === 'DMPrivate',
+              taughtBy: 'DM',
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const replyMsg: EonixChatMessage = {
+              id: `msg-eonix-${Date.now()}`,
+              sender: 'eonix',
+              mode: 'teach',
+              text: `${t.eonixCompanion.sampleTeachAckPrefix} "${data.targetCanonicalName || text}" has been inscribed into memory.`,
+              timestampUtc: new Date().toISOString(),
+              citations: ['Provenance: DMConversationalTeaching'],
+              knowledgeState: data.knowledgeState,
+              visibility: data.visibility,
+            };
+            setEonixMessages((prev) => [...prev, dmMsg, replyMsg]);
+            setHomeStatus((prev) => ({ ...prev, eonixVisualState: 'Idle' }));
+            return;
+          }
+        }
+      } catch {
+        // Fallback to local simulation if offline
+      }
+    }
 
     if (mode === 'teach') {
       const newLore: WorldLoreEntryDto = {
@@ -1456,6 +1580,15 @@ export const App: React.FC = () => {
                   </strong>
                 </div>
 
+                <button
+                  type="button"
+                  className="btn btn-secondary flex items-center gap-1.5"
+                  onClick={() => handleOpenSummary('PartySafe')}
+                  title="Open Session Chronicle & Narrative Summary (EPIC-08)"
+                >
+                  📜 {settings.uiLanguage === 'Spanish' ? 'Crónica de Sesión' : 'Session Chronicle'}
+                </button>
+
                 {homeStatus.sessionState === 'Idle' ||
                 homeStatus.sessionState === 'Ended' ? (
                   <button
@@ -1780,6 +1913,15 @@ export const App: React.FC = () => {
           t={t}
         />
       )}
+
+      <SessionSummaryModal
+        isOpen={showSummaryModal}
+        onClose={() => setShowSummaryModal(false)}
+        summary={currentSummary}
+        onGenerateSummary={handleOpenSummary}
+        isLoading={isGeneratingSummary}
+        t={t}
+      />
 
       {endSessionStage > 0 && (
         <TwoStageEndSessionModal

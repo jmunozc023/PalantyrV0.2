@@ -618,3 +618,172 @@ export interface UpdateMemoryEntityRequest {
   locationFacet?: LocationFacetDto;
   journeyFacet?: JourneyFacetDto;
 }
+
+// Wave 4: Session Summaries, Needs Attention & Eonix Tabletop Assistant (EPIC-08, EPIC-09, EPIC-10)
+
+export type SummaryVisibilityMode = 'PartySafe' | 'DmFull';
+
+export interface SummaryKeyEventDto {
+  eventId: string;
+  description: string;
+  relativeTimeContext?: string | null;
+  locationId?: string | null;
+  participants: string[];
+  visibility: VisibilityScope;
+}
+
+export interface SummaryDiscoveryDto {
+  subject: string;
+  description: string;
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+}
+
+export interface SessionSummaryDto {
+  summaryId: string;
+  campaignId: string;
+  sessionId: string;
+  mode: SummaryVisibilityMode;
+  title: string;
+  executiveRecap: string;
+  keyEvents: SummaryKeyEventDto[];
+  majorDiscoveries: SummaryDiscoveryDto[];
+  outstandingQuestions: string[];
+  dmPrivateNotes?: string | null;
+  generatedAtUtc: string;
+  promptTemplateVersion: string;
+  sources: ProvenanceRef[];
+}
+
+export interface GenerateSummaryRequest {
+  mode: SummaryVisibilityMode;
+  targetLanguage?: PalantyrLanguage;
+  includeDmPrivateNotes?: boolean;
+  customFocusNotes?: string | null;
+}
+
+export interface UpdateSummaryRequest {
+  title?: string | null;
+  executiveRecap?: string | null;
+  keyEvents?: SummaryKeyEventDto[] | null;
+  majorDiscoveries?: SummaryDiscoveryDto[] | null;
+  outstandingQuestions?: string[] | null;
+  dmPrivateNotes?: string | null;
+  dmCorrectionNote?: string | null;
+  correctedBy?: string;
+}
+
+export type NeedsAttentionAction =
+  | 'Confirm'
+  | 'RejectWithTombstone'
+  | 'DeferOrUnresolved'
+  | 'LinkToExisting'
+  | 'ClassifyAsJoke'
+  | 'PromoteToCanon';
+
+export interface ResolveAttentionItemRequest {
+  action: NeedsAttentionAction;
+  targetEntityId?: string | null;
+  correctionText?: string | null;
+  notes?: string | null;
+  resolvedBy?: string;
+}
+
+export interface MemoryReviewItemDto {
+  entityId: string;
+  canonicalName: string;
+  entityType: MemoryEntityType;
+  claimOrStatement: string;
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+  sourceSessionId?: string | null;
+  timestampMs?: number | null;
+  isConfirmed?: boolean;
+  isRejected?: boolean;
+}
+
+export interface SingleReviewDecisionDto {
+  entityId: string;
+  isConfirmed: boolean;
+  isRejected: boolean;
+  correctionText?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface BatchReviewRequest {
+  sessionId: string;
+  decisions: SingleReviewDecisionDto[];
+  decidedBy?: string;
+}
+
+export interface ReviewUndoToken {
+  undoTokenId: string;
+  campaignId: string;
+  sessionId: string;
+  executedAtUtc: string;
+  affectedEntityIds: string[];
+}
+
+export interface AudioClipRequest {
+  sessionId: string;
+  segmentId: string;
+  targetTimestampMs: number;
+  preRollSeconds?: number;
+  postRollSeconds?: number;
+}
+
+export interface AudioClipResult {
+  clipFilePath: string;
+  startTimestampMs: number;
+  endTimestampMs: number;
+  durationSeconds: number;
+}
+
+export type EonixScope = 'CampaignDmFull' | 'PartyKnowledge' | 'CharacterScoped';
+
+export interface EvidenceSourceDto {
+  sourceId: string;
+  sourceType: ProvenanceSourceType;
+  entityId?: string | null;
+  sessionId?: string | null;
+  segmentId?: string | null;
+  spanId?: string | null;
+  timestampMs?: number | null;
+  snippet: string;
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+}
+
+export interface EonixChatQueryRequest {
+  query: string;
+  scope?: EonixScope;
+  scopeCharacterId?: string | null;
+  language?: PalantyrLanguage;
+}
+
+export interface EonixChatQueryResponse {
+  answer: string;
+  isGrounded: boolean;
+  confidence: ConfidenceLevel;
+  confidenceScore: number;
+  sources: EvidenceSourceDto[];
+  scopeApplied: EonixScope;
+}
+
+export interface EonixTeachRequest {
+  taughtStatement: string;
+  targetEntityName?: string | null;
+  isDmSecret?: boolean;
+  clarificationResponse?: string | null;
+  taughtBy?: string;
+}
+
+export interface EonixTeachResponse {
+  success: boolean;
+  targetEntityId: string;
+  targetCanonicalName: string;
+  knowledgeState: KnowledgeState;
+  visibility: VisibilityScope;
+  requiresClarification: boolean;
+  clarificationQuestion?: string | null;
+}

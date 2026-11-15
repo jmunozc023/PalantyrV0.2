@@ -33,6 +33,22 @@ export const TranscriptAndReviewPanel: React.FC<TranscriptAndReviewPanelProps> =
   const [editingSpanId, setEditingSpanId] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'transcripts' | 'attention'>('transcripts');
+  const [currentAttentionIndex, setCurrentAttentionIndex] = useState<number>(0);
+  const [quickCorrectionText, setQuickCorrectionText] = useState<string>('');
+  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const [audioFeedback, setAudioFeedback] = useState<string | null>(null);
+
+  const unresolvedAttentionItems = needsAttentionItems.filter((i) => !i.isResolved);
+  const currentAttentionItem = unresolvedAttentionItems[currentAttentionIndex] || unresolvedAttentionItems[0];
+
+  const handlePlayAudioClip = (timestampMs: number) => {
+    setIsPlayingAudio(true);
+    setAudioFeedback(t.needsAttentionOneScroll?.playingAudio ?? 'Playing 10s audio context...');
+    setTimeout(() => {
+      setIsPlayingAudio(false);
+      setAudioFeedback(null);
+    }, 3000);
+  };
 
   const activeSegment = transcripts.find((s) => s.segmentId === selectedSegmentId) || transcripts[0];
 
@@ -236,62 +252,163 @@ export const TranscriptAndReviewPanel: React.FC<TranscriptAndReviewPanelProps> =
       )}
 
       {activeTab === 'attention' && (
-        <div className="attention-content">
-          {needsAttentionItems.filter((i) => !i.isResolved).length === 0 ? (
-            <div className="empty-panel-state">
-              <p>
-                ✅ {language === 'Spanish'
-                  ? 'No hay dudas de continuidad pendientes. ¡Todo está en orden!'
-                  : 'No continuity uncertainties pending review. Everything is clear!'}
+        <div className="attention-content p-4 space-y-4">
+          {unresolvedAttentionItems.length === 0 ? (
+            <div className="empty-panel-state p-8 text-center bg-slate-900/40 rounded-xl border border-slate-800">
+              <p className="text-emerald-400 font-semibold text-sm">
+                {t.needsAttentionOneScroll?.allResolvedMessage ?? '🎉 All continuity doubts for this session are resolved!'}
               </p>
             </div>
           ) : (
-            <div className="attention-list">
-              {needsAttentionItems
-                .filter((i) => !i.isResolved)
-                .map((item) => (
-                  <div key={item.id} className="attention-card">
-                    <div className="attention-header">
-                      <span className="attention-title">⚠️ {item.title}</span>
-                      <span className="timestamp-badge">
-                        ⏱️ {formatTimestamp(item.approximateTimestampMs)}
+            <div className="single-scroll-stepper space-y-4">
+              {/* Stepper Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <span className="bg-red-950/80 text-red-300 border border-red-800 text-xs px-2.5 py-1 rounded-full font-bold animate-pulse">
+                    {t.needsAttentionOneScroll?.resolveAsapBadge ?? '🔥 RESOLVE ASAP'}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {t.needsAttentionOneScroll?.itemCounter
+                      ? t.needsAttentionOneScroll.itemCounter
+                          .replace('{current}', String(Math.min(currentAttentionIndex + 1, unresolvedAttentionItems.length)))
+                          .replace('{total}', String(unresolvedAttentionItems.length))
+                      : `Item ${currentAttentionIndex + 1} of ${unresolvedAttentionItems.length}`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentAttentionIndex === 0}
+                    onClick={() => setCurrentAttentionIndex(prev => Math.max(0, prev - 1))}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-xs text-slate-300 rounded transition"
+                  >
+                    ← {language === 'Spanish' ? 'Anterior' : 'Previous'}
+                  </button>
+                  <button
+                    disabled={currentAttentionIndex >= unresolvedAttentionItems.length - 1}
+                    onClick={() => setCurrentAttentionIndex(prev => Math.min(unresolvedAttentionItems.length - 1, prev + 1))}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-xs text-slate-300 rounded transition"
+                  >
+                    {language === 'Spanish' ? 'Siguiente' : 'Next'} →
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Attention Card ("One Scroll at a Time") */}
+              {currentAttentionItem && (
+                <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-5 shadow-lg space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>{currentAttentionItem.title}</span>
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        Span ID: <span className="font-mono text-slate-300">{currentAttentionItem.targetSpanId}</span>
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handlePlayAudioClip(currentAttentionItem.approximateTimestampMs)}
+                      disabled={isPlayingAudio}
+                      className="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 text-xs font-semibold rounded-lg transition flex items-center gap-1.5"
+                    >
+                      <span>{isPlayingAudio ? '🔊' : '▶'}</span>
+                      <span>
+                        {isPlayingAudio
+                          ? (t.needsAttentionOneScroll?.playingAudio ?? 'Playing...')
+                          : (t.needsAttentionOneScroll?.audioPreviewBtn ?? 'Play 10s Audio')}
                       </span>
-                    </div>
-
-                    <p className="attention-prompt">
-                      {language === 'Spanish' ? item.promptMessageEs : item.promptMessageEn}
-                    </p>
-
-                    <div className="attention-actions">
-                      <button
-                        className="btn-primary small"
-                        onClick={() =>
-                          onResolveAttentionItem(
-                            item.id,
-                            language === 'Spanish'
-                              ? 'Confirmado como Canon de Campaña'
-                              : 'Confirmed as Campaign Canon'
-                          )
-                        }
-                      >
-                        ✅ {language === 'Spanish' ? 'Es Canon' : 'It Is Canon'}
-                      </button>
-                      <button
-                        className="btn-secondary small"
-                        onClick={() =>
-                          onResolveAttentionItem(
-                            item.id,
-                            language === 'Spanish'
-                              ? 'Descartado como broma o charla fuera de rol'
-                              : 'Discarded as table-talk joke'
-                          )
-                        }
-                      >
-                        ❌ {language === 'Spanish' ? 'Fue Broma / Charla' : 'Table Talk / Joke'}
-                      </button>
-                    </div>
+                    </button>
                   </div>
-                ))}
+
+                  {audioFeedback && (
+                    <div className="text-xs text-amber-400 font-mono bg-amber-950/30 p-2 rounded border border-amber-900/50">
+                      {audioFeedback} (Timestamp: {formatTimestamp(currentAttentionItem.approximateTimestampMs)})
+                    </div>
+                  )}
+
+                  <div className="bg-slate-950/80 border border-slate-800/80 p-3.5 rounded-lg text-xs leading-relaxed text-slate-200">
+                    {language === 'Spanish' ? currentAttentionItem.promptMessageEs : currentAttentionItem.promptMessageEn}
+                  </div>
+
+                  {/* Quick Correction Input */}
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={quickCorrectionText}
+                      onChange={(e) => setQuickCorrectionText(e.target.value)}
+                      placeholder={t.needsAttentionOneScroll?.quickCorrectionPlaceholder ?? 'Enter quick DM correction or alias...'}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  {/* Multi-Candidate Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition"
+                      onClick={() => {
+                        const note = quickCorrectionText ? `Confirmed: ${quickCorrectionText}` : 'Confirmed as Campaign Canon';
+                        onResolveAttentionItem(currentAttentionItem.id, note);
+                        setQuickCorrectionText('');
+                        if (currentAttentionIndex >= unresolvedAttentionItems.length - 1) {
+                          setCurrentAttentionIndex(Math.max(0, unresolvedAttentionItems.length - 2));
+                        }
+                      }}
+                    >
+                      {t.needsAttentionOneScroll?.confirmCanonBtn ?? '✓ Confirm Canon'}
+                    </button>
+
+                    <button
+                      className="px-3 py-1.5 bg-red-800/80 hover:bg-red-700 text-red-100 text-xs font-semibold rounded-lg transition border border-red-700/60"
+                      onClick={() => {
+                        onResolveAttentionItem(currentAttentionItem.id, 'Rejected lore (persisted resolution tombstone)');
+                        setQuickCorrectionText('');
+                        if (currentAttentionIndex >= unresolvedAttentionItems.length - 1) {
+                          setCurrentAttentionIndex(Math.max(0, unresolvedAttentionItems.length - 2));
+                        }
+                      }}
+                    >
+                      {t.needsAttentionOneScroll?.rejectTombstoneBtn ?? '✕ Reject Lore'}
+                    </button>
+
+                    <button
+                      className="px-3 py-1.5 bg-indigo-900/70 hover:bg-indigo-800 text-indigo-200 text-xs font-semibold rounded-lg transition border border-indigo-700/60"
+                      onClick={() => {
+                        onResolveAttentionItem(currentAttentionItem.id, `Linked to existing entity: ${quickCorrectionText || 'Canonical Lore'}`);
+                        setQuickCorrectionText('');
+                        if (currentAttentionIndex >= unresolvedAttentionItems.length - 1) {
+                          setCurrentAttentionIndex(Math.max(0, unresolvedAttentionItems.length - 2));
+                        }
+                      }}
+                    >
+                      {t.needsAttentionOneScroll?.linkExistingBtn ?? '🔗 Link Existing'}
+                    </button>
+
+                    <button
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+                      onClick={() => {
+                        onResolveAttentionItem(currentAttentionItem.id, 'Classified as table-talk joke');
+                        setQuickCorrectionText('');
+                        if (currentAttentionIndex >= unresolvedAttentionItems.length - 1) {
+                          setCurrentAttentionIndex(Math.max(0, unresolvedAttentionItems.length - 2));
+                        }
+                      }}
+                    >
+                      {t.needsAttentionOneScroll?.jokeTableTalkBtn ?? '🎭 Joke'}
+                    </button>
+
+                    <button
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-semibold rounded-lg transition ml-auto"
+                      onClick={() => {
+                        setCurrentAttentionIndex(prev => Math.min(unresolvedAttentionItems.length - 1, prev + 1));
+                      }}
+                    >
+                      {t.needsAttentionOneScroll?.deferBtn ?? '⏱ Defer'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

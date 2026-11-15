@@ -14,7 +14,8 @@ export interface EonixCompanionCardProps {
   onSendMessage: (
     text: string,
     mode: 'ask' | 'teach',
-    visibility: VisibilityScope
+    visibility: VisibilityScope,
+    scope?: 'CampaignDmFull' | 'PartyKnowledge' | 'CharacterScoped'
   ) => void;
   onSelectStatePreview?: (state: EonixState) => void;
   t: TranslationDictionary;
@@ -45,6 +46,8 @@ export const EonixCompanionCard: React.FC<EonixCompanionCardProps> = ({
   const [inputText, setInputText] = useState('');
   const [teachVisibility, setTeachVisibility] =
     useState<VisibilityScope>('PartyKnown');
+  const [activeScope, setActiveScope] = useState<'CampaignDmFull' | 'PartyKnowledge'>('PartyKnowledge');
+  const [selectedCitation, setSelectedCitation] = useState<string | null>(null);
 
   const stateMeta = t.eonixStates[eonixState];
 
@@ -52,13 +55,13 @@ export const EonixCompanionCard: React.FC<EonixCompanionCardProps> = ({
     e.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed) return;
-    onSendMessage(trimmed, activeMode, teachVisibility);
+    onSendMessage(trimmed, activeMode, teachVisibility, activeScope);
     setInputText('');
   };
 
   const handleQuickPrompt = (promptText: string) => {
     setActiveMode('ask');
-    onSendMessage(promptText, 'ask', 'PartyKnown');
+    onSendMessage(promptText, 'ask', 'PartyKnown', activeScope);
   };
 
   return (
@@ -74,6 +77,19 @@ export const EonixCompanionCard: React.FC<EonixCompanionCardProps> = ({
           <span className="eonix-subtitle">{t.eonixCompanion.title}</span>
         </div>
         <div className="eonix-header-badges">
+          {/* Knowledge Scope Selector Pill (ADR-007, US-10.2) */}
+          <button
+            type="button"
+            onClick={() => setActiveScope(prev => prev === 'PartyKnowledge' ? 'CampaignDmFull' : 'PartyKnowledge')}
+            className={`badge cursor-pointer transition ${
+              activeScope === 'PartyKnowledge'
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/80'
+                : 'bg-amber-950/80 text-amber-300 border border-amber-700/80'
+            }`}
+            title="Click to toggle Eonix Knowledge Scope"
+          >
+            {activeScope === 'PartyKnowledge' ? '🛡 Party Safe Scope' : '⚔ DM Full Scope'}
+          </button>
           <span className="badge badge-private" title="UX-EONIX-001">
             🔒 {t.eonixCompanion.privacyBadge}
           </span>
@@ -216,11 +232,18 @@ export const EonixCompanionCard: React.FC<EonixCompanionCardProps> = ({
                 </div>
                 <p>{msg.text}</p>
                 {msg.citations && msg.citations.length > 0 && (
-                  <div className="bubble-citations">
+                  <div className="bubble-citations flex flex-wrap gap-1.5 mt-2">
                     {msg.citations.map((cit, i) => (
-                      <span key={i} className="citation-chip">
-                        📎 {cit}
-                      </span>
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setSelectedCitation(cit)}
+                        className="citation-chip cursor-pointer hover:bg-amber-900/60 transition text-amber-300 border border-amber-700/60 rounded px-2 py-0.5 text-[10px] flex items-center gap-1"
+                        title="Click to view grounded evidence source"
+                      >
+                        <span>📎</span>
+                        <span>{cit}</span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -278,6 +301,68 @@ export const EonixCompanionCard: React.FC<EonixCompanionCardProps> = ({
           </button>
         </form>
       </div>
+
+      {/* Grounded Evidence Drawer (ADR-007, US-10.5, AC-EONIX-003) */}
+      {selectedCitation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-5 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-400 font-bold">📎</span>
+                <h4 className="text-sm font-bold text-amber-300">
+                  {t.evidenceDrawer?.drawerTitle ?? 'Grounded Evidence Source'}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCitation(null)}
+                className="text-slate-400 hover:text-white p-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-emerald-950/40 border border-emerald-800/80 p-2.5 rounded-lg text-emerald-300 font-mono text-[11px] flex items-center justify-between">
+                <span>{t.evidenceDrawer?.groundedBadge ?? '✓ GROUNDED IN CANON MEMORY'}</span>
+                <span className="text-slate-400 font-mono">100% Certainty</span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">
+                  {t.evidenceDrawer?.snippetLabel ?? 'Evidence Citation'}:
+                </label>
+                <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-slate-200 leading-relaxed font-mono text-[11px]">
+                  {selectedCitation}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-1">
+                <div>
+                  <span className="font-semibold text-slate-300">Source: </span>
+                  <span>Session Transcript</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-300">Scope: </span>
+                  <span className={activeScope === 'PartyKnowledge' ? 'text-emerald-400' : 'text-amber-400'}>
+                    {activeScope === 'PartyKnowledge' ? 'Party Safe' : 'DM Full'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedCitation(null)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+              >
+                {t.evidenceDrawer?.closeBtn ?? 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

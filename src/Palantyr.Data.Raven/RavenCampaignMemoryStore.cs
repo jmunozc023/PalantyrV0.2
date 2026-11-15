@@ -531,6 +531,85 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
         }
     }
 
+
+    public async Task SaveSessionSummaryAsync(
+        string campaignId,
+        SessionSummaryDto summary,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentNullException.ThrowIfNull(summary);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var summaries = await LoadSummariesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var index = summaries.FindIndex(s => string.Equals(s.SummaryId, summary.SummaryId, StringComparison.OrdinalIgnoreCase) ||
+                                                 (string.Equals(s.SessionId, summary.SessionId, StringComparison.OrdinalIgnoreCase) && s.Mode == summary.Mode));
+            if (index >= 0)
+            {
+                summaries[index] = summary;
+            }
+            else
+            {
+                summaries.Add(summary);
+            }
+
+            await SaveSummariesInternalAsync(campaignId, summaries, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<SessionSummaryDto?> GetSessionSummaryAsync(
+        string campaignId,
+        string sessionId,
+        SummaryVisibilityMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var summaries = await LoadSummariesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return summaries.FirstOrDefault(s => string.Equals(s.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) && s.Mode == mode);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<SessionSummaryDto>> ListSessionSummariesAsync(
+        string campaignId,
+        string? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var summaries = await LoadSummariesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                return summaries.Where(s => string.Equals(s.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                                .OrderByDescending(s => s.GeneratedAtUtc)
+                                .ToList();
+            }
+
+            return summaries.OrderByDescending(s => s.GeneratedAtUtc).ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
     public async Task SaveTranscriptSegmentAsync(
         string campaignId,
         TranscriptSegmentDocument transcript,
@@ -901,6 +980,29 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
         await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
     }
 
+
+
+    private string GetSummariesFilePath(string campaignId) =>
+        Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "session_summaries.json");
+
+    private async Task<List<SessionSummaryDto>> LoadSummariesInternalAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var path = GetSummariesFilePath(campaignId);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<List<SessionSummaryDto>>(json, JsonOptions) ?? [];
+    }
+
+    private async Task SaveSummariesInternalAsync(string campaignId, List<SessionSummaryDto> items, CancellationToken cancellationToken)
+    {
+        var path = GetSummariesFilePath(campaignId);
+        var json = JsonSerializer.Serialize(items, JsonOptions);
+        await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
 
     private string GetCampaignSnapshotFilePath(string campaignId) =>
         Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "campaign.json");

@@ -363,6 +363,54 @@ export interface TranslationDictionary {
       saveSettingsBtn: string;
       closeBtn: string;
     };
+    sessionSummary: {
+      title: string;
+      subtitle: string;
+      partySafeTab: string;
+      partySafeBadge: string;
+      dmFullTab: string;
+      dmFullBadge: string;
+      executiveRecapTitle: string;
+      keyEventsTitle: string;
+      discoveriesTitle: string;
+      outstandingQuestionsTitle: string;
+      dmPrivateNotesTitle: string;
+      copyMarkdownBtn: string;
+      copyDiscordBtn: string;
+      copySuccess: string;
+      exportHtmlBtn: string;
+      closeBtn: string;
+      correctSummaryBtn: string;
+      emptySummaryNotice: string;
+    };
+  };
+  needsAttentionOneScroll: {
+    cardTitle: string;
+    itemCounter: string;
+    resolveAsapBadge: string;
+    audioPreviewBtn: string;
+    playingAudio: string;
+    confirmCanonBtn: string;
+    rejectTombstoneBtn: string;
+    linkExistingBtn: string;
+    jokeTableTalkBtn: string;
+    deferBtn: string;
+    quickCorrectionPlaceholder: string;
+    resolvedSuccess: string;
+    allResolvedMessage: string;
+    undoActionBtn: string;
+  };
+  evidenceDrawer: {
+    drawerTitle: string;
+    closeBtn: string;
+    groundedBadge: string;
+    unconfirmedBadge: string;
+    citationCounter: string;
+    sourceTypeLabel: string;
+    timestampLabel: string;
+    sessionLabel: string;
+    snippetLabel: string;
+    noSourcesMessage: string;
   };
 }
 
@@ -855,6 +903,54 @@ export const translations: Record<LocaleCode, TranslationDictionary> = {
         saveSettingsBtn: 'Save Settings',
         closeBtn: 'Close',
       },
+      sessionSummary: {
+        title: 'Session Narrative Summary & Lore Chronicle',
+        subtitle: 'Context-aware narrative synthesis strictly governed by Pre-Generation Visibility Filtering (ADR-006).',
+        partySafeTab: 'Party-Safe Chronicle',
+        partySafeBadge: '🛡 PARTY SAFE — ZERO PRIVATE SECRETS',
+        dmFullTab: 'DM Full Chronicle',
+        dmFullBadge: '⚔ DM FULL — CONTAINS PRIVATE NOTES',
+        executiveRecapTitle: 'Executive Narrative Recap',
+        keyEventsTitle: 'Key In-World Milestones',
+        discoveriesTitle: 'Major Discoveries & Canon Shifts',
+        outstandingQuestionsTitle: 'Open Campaign Threads',
+        dmPrivateNotesTitle: 'DM Confidential Lore & Revelations',
+        copyMarkdownBtn: '📋 Copy Clean Markdown',
+        copyDiscordBtn: '💬 Copy for Discord / OneNote',
+        copySuccess: '✓ Copied to clipboard!',
+        exportHtmlBtn: 'Export HTML',
+        closeBtn: 'Close Chronicle',
+        correctSummaryBtn: '✎ Edit / Correct Chronicle',
+        emptySummaryNotice: 'No narrative summary has been generated for this session yet.',
+      },
+    },
+    needsAttentionOneScroll: {
+      cardTitle: 'Needs Attention — One Scroll at a Time',
+      itemCounter: 'Item {current} of {total}',
+      resolveAsapBadge: '🔥 RESOLVE ASAP',
+      audioPreviewBtn: '▶ Play 10s Audio Context',
+      playingAudio: 'Playing audio...',
+      confirmCanonBtn: '✓ Confirm Canon',
+      rejectTombstoneBtn: '✕ Reject Lore',
+      linkExistingBtn: '🔗 Link to Existing Entity',
+      jokeTableTalkBtn: '🎭 Classify Table Joke',
+      deferBtn: '⏱ Defer for Later',
+      quickCorrectionPlaceholder: 'Enter quick DM correction or alias...',
+      resolvedSuccess: 'Item resolved successfully!',
+      allResolvedMessage: '🎉 All Needs Attention items for this session have been resolved!',
+      undoActionBtn: '↶ Undo Last Resolution',
+    },
+    evidenceDrawer: {
+      drawerTitle: 'Grounded Evidence Sources',
+      closeBtn: 'Close Evidence Drawer',
+      groundedBadge: '✓ GROUNDED IN CANON MEMORY',
+      unconfirmedBadge: '⚠ UNCONFIRMED / HIGH-ENTROPY',
+      citationCounter: '{count} Cited Evidence Source(s)',
+      sourceTypeLabel: 'Source Type',
+      timestampLabel: 'Audio Timestamp',
+      sessionLabel: 'Session',
+      snippetLabel: 'Evidence Snippet',
+      noSourcesMessage: 'No explicit citations available for this statement.',
     },
   },
   es: {
@@ -1353,6 +1449,54 @@ export const translations: Record<LocaleCode, TranslationDictionary> = {
         saveSettingsBtn: 'Guardar Ajustes',
         closeBtn: 'Cerrar',
       },
+      sessionSummary: {
+        title: 'Resumen Narrativo de Sesión y Crónica de Lore',
+        subtitle: 'Síntesis narrativa consciente del contexto regulada estrictamente por Filtrado de Visibilidad Pre-Generación (ADR-006).',
+        partySafeTab: 'Crónica Segura para el Grupo',
+        partySafeBadge: '🛡 SEGURO PARA EL GRUPO — CERO SECRETOS',
+        dmFullTab: 'Crónica Completa del DM',
+        dmFullBadge: '⚔ DM COMPLETO — CONTIENE NOTAS PRIVADAS',
+        executiveRecapTitle: 'Resumen Narrativo Ejecutivo',
+        keyEventsTitle: 'Hitos Clave del Mundo',
+        discoveriesTitle: 'Descubrimientos y Giros del Canon',
+        outstandingQuestionsTitle: 'Hilos Abiertos de la Campaña',
+        dmPrivateNotesTitle: 'Lore y Revelaciones Confidenciales del DM',
+        copyMarkdownBtn: '📋 Copiar Markdown Limpio',
+        copyDiscordBtn: '💬 Copiar para Discord / OneNote',
+        copySuccess: '✓ ¡Copiado al portapapeles!',
+        exportHtmlBtn: 'Exportar HTML',
+        closeBtn: 'Cerrar Crónica',
+        correctSummaryBtn: '✎ Editar / Corregir Crónica',
+        emptySummaryNotice: 'Aún no se ha generado un resumen narrativo para esta sesión.',
+      },
+    },
+    needsAttentionOneScroll: {
+      cardTitle: 'Requiere Atención — Un Desplazamiento a la Vez',
+      itemCounter: 'Elemento {current} de {total}',
+      resolveAsapBadge: '🔥 RESOLVER URGENTE',
+      audioPreviewBtn: '▶ Reproducir 10s de Audio',
+      playingAudio: 'Reproduciendo audio...',
+      confirmCanonBtn: '✓ Confirmar Canon',
+      rejectTombstoneBtn: '✕ Rechazar Lore',
+      linkExistingBtn: '🔗 Vincular a Entidad Existente',
+      jokeTableTalkBtn: '🎭 Clasificar como Broma de Mesa',
+      deferBtn: '⏱ Deferir para Después',
+      quickCorrectionPlaceholder: 'Ingresa corrección rápida del DM o alias...',
+      resolvedSuccess: '¡Elemento resuelto con éxito!',
+      allResolvedMessage: '🎉 ¡Todos los elementos de atención para esta sesión han sido resueltos!',
+      undoActionBtn: '↶ Deshacer Última Resolución',
+    },
+    evidenceDrawer: {
+      drawerTitle: 'Fuentes de Evidencia Fundamentada',
+      closeBtn: 'Cerrar Panel de Evidencia',
+      groundedBadge: '✓ FUNDAMENTADO EN MEMORIA CANÓNICA',
+      unconfirmedBadge: '⚠ NO CONFIRMADO / ALTA ENTROPÍA',
+      citationCounter: '{count} Fuente(s) de Evidencia Citadas',
+      sourceTypeLabel: 'Tipo de Fuente',
+      timestampLabel: 'Marca de Tiempo en Audio',
+      sessionLabel: 'Sesión',
+      snippetLabel: 'Fragmento de Evidencia',
+      noSourcesMessage: 'No hay citas explícitas disponibles para esta afirmación.',
     },
   },
 };

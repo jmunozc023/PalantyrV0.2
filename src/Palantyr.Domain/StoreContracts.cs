@@ -50,4 +50,9 @@ public interface ICampaignMemoryStore
     Task<IReadOnlyList<MemoryConflictDto>> ListConflictsAsync(string campaignId, string? entityId = null, bool unresolvedOnly = true, CancellationToken cancellationToken = default);
     Task<MemoryConflictDto?> GetConflictAsync(string campaignId, string conflictId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LocationHierarchyNodeDto>> GetLocationHierarchyTreeAsync(string campaignId, CancellationToken cancellationToken = default);
+
+    // Wave 4: Session Summaries, Review & Eonix persistence (EPIC-08, EPIC-09, EPIC-10)
+    Task SaveSessionSummaryAsync(string campaignId, SessionSummaryDto summary, CancellationToken cancellationToken = default);
+    Task<SessionSummaryDto?> GetSessionSummaryAsync(string campaignId, string sessionId, SummaryVisibilityMode mode, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SessionSummaryDto>> ListSessionSummariesAsync(string campaignId, string? sessionId = null, CancellationToken cancellationToken = default);
 }

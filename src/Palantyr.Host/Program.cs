@@ -28,6 +28,9 @@ builder.Services.AddSingleton<ITranscriptionEngine, LocalWhisperTranscriptionEng
 builder.Services.AddSingleton<IContextClassifier, TwoStageContextClassifier>();
 builder.Services.AddSingleton<ITranscriptionQueue, PersistentTranscriptionQueue>();
 builder.Services.AddSingleton<CampaignMemoryService>();
+builder.Services.AddSingleton<ISessionSummaryGenerator, SessionSummaryService>();
+builder.Services.AddSingleton<SessionReviewService>();
+builder.Services.AddSingleton<IEonixAssistantService, EonixAssistantService>();
 
 var app = builder.Build();
 
@@ -554,6 +557,110 @@ api.MapGet("/campaigns/{id}/memory/locations/hierarchy", async (
 {
     var tree = await memoryStore.GetLocationHierarchyTreeAsync(id, ct);
     return Results.Ok(tree);
+});
+
+// ============================================================================
+// Wave 4: Session Summaries, Needs Attention & Eonix Tabletop Assistant (EPIC-08..10)
+// ============================================================================
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/summaries/generate", async (
+    string id,
+    string sessionId,
+    [FromBody] GenerateSummaryRequest request,
+    ISessionSummaryGenerator summaryService,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var summary = await summaryService.GenerateSummaryAsync(id, sessionId, request, ct);
+    await memoryStore.SaveSessionSummaryAsync(id, summary, ct);
+    return Results.Ok(summary);
+});
+
+api.MapGet("/campaigns/{id}/sessions/{sessionId}/summaries", async (
+    string id,
+    string sessionId,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var summaries = await memoryStore.ListSessionSummariesAsync(id, sessionId, ct);
+    return Results.Ok(summaries);
+});
+
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/summaries/{summaryId}/correct", async (
+    string id,
+    string sessionId,
+    string summaryId,
+    [FromBody] UpdateSummaryRequest request,
+    ISessionSummaryGenerator summaryService,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var updated = await summaryService.PropagateSummaryCorrectionAsync(id, summaryId, request, ct);
+    await memoryStore.SaveSessionSummaryAsync(id, updated, ct);
+    return Results.Ok(updated);
+});
+
+api.MapPost("/campaigns/{id}/review/needs-attention/{itemId}/resolve-full", async (
+    string id,
+    string itemId,
+    [FromBody] ResolveAttentionItemRequest request,
+    SessionReviewService reviewService,
+    CancellationToken ct) =>
+{
+    var success = await reviewService.ResolveAttentionItemAsync(id, itemId, request, ct);
+    return Results.Ok(new { success });
+});
+
+api.MapPost("/campaigns/{id}/review/batch", async (
+    string id,
+    [FromBody] BatchReviewRequest request,
+    SessionReviewService reviewService,
+    CancellationToken ct) =>
+{
+    var undoToken = await reviewService.ProcessBatchReviewAsync(id, request, ct);
+    return Results.Ok(undoToken);
+});
+
+api.MapPost("/campaigns/{id}/review/batch/undo", async (
+    string id,
+    [FromQuery] string undoTokenId,
+    SessionReviewService reviewService,
+    CancellationToken ct) =>
+{
+    var success = await reviewService.UndoBatchReviewAsync(id, undoTokenId, ct);
+    return Results.Ok(new { success });
+});
+
+api.MapPost("/campaigns/{id}/audio/clips/slice", (
+    string id,
+    [FromBody] AudioClipRequest request) =>
+{
+    // Clip slicing simulation or local file read
+    var result = new AudioClipResult(
+        ClipFilePath: $"clip_{request.SessionId}_{request.TargetTimestampMs}.wav",
+        StartTimestampMs: Math.Max(0, request.TargetTimestampMs - 5000),
+        EndTimestampMs: request.TargetTimestampMs + 5000,
+        DurationSeconds: 10.0);
+    return Results.Ok(result);
+});
+
+api.MapPost("/campaigns/{id}/eonix/chat", async (
+    string id,
+    [FromBody] EonixChatQueryRequest request,
+    IEonixAssistantService eonixService,
+    CancellationToken ct) =>
+{
+    var response = await eonixService.AskAsync(id, request, ct);
+    return Results.Ok(response);
+});
+
+api.MapPost("/campaigns/{id}/eonix/teach", async (
+    string id,
+    [FromBody] EonixTeachRequest request,
+    IEonixAssistantService eonixService,
+    CancellationToken ct) =>
+{
+    var response = await eonixService.TeachAsync(id, request, ct);
+    return Results.Ok(response);
 });
 
 // Window Close Guard (NFR-REL-009, AC-REL-004)
