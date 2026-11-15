@@ -293,3 +293,66 @@ export interface EonixChatMessage {
   knowledgeState?: KnowledgeState;
   visibility?: VisibilityScope;
 }
+
+export interface MachineUtteranceDto {
+  utteranceId: string;
+  startMs: number;
+  endMs: number;
+  originalText: string;
+  confidenceScore: number;
+}
+
+export interface WorkingTranscriptSpanDto {
+  spanId: string;
+  segmentId: string;
+  startMs: number;
+  endMs: number;
+  originalText: string;
+  correctedText: string;
+  contextType: ConversationContextType;
+  contextConfidence: number;
+  isUserEdited?: boolean;
+  isManuallyConfirmed?: boolean;
+  promotionReason?: string | null;
+  confirmedBy?: string | null;
+}
+
+export interface TranscriptSegmentDto {
+  id: string;
+  campaignId: string;
+  sessionId: string;
+  segmentId: string;
+  sequenceNumber: number;
+  language: PalantyrLanguage;
+  transcribedAtUtc: string;
+  machineUtterances: MachineUtteranceDto[];
+  workingSpans: WorkingTranscriptSpanDto[];
+}
+
+export interface NeedsAttentionItemDto {
+  id: string;
+  campaignId: string;
+  sessionId: string;
+  sourceType: string;
+  title: string;
+  promptMessageEn: string;
+  promptMessageEs: string;
+  targetSpanId: string;
+  approximateTimestampMs: number;
+  isResolved: boolean;
+  resolutionDecision?: string | null;
+  createdAtUtc: string;
+  resolvedAtUtc?: string | null;
+}
+
+export interface TranscriptionJobStatusDto {
+  jobId: string;
+  campaignId: string;
+  sessionId: string;
+  segmentId: string;
+  state: SubsystemProcessingState;
+  enqueuedAtUtc: string;
+  completedAtUtc: string | null;
+  retryCount: number;
+  errorMessage: string | null;
+}
