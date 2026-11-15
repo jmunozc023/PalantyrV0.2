@@ -241,6 +241,183 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
         }
     }
 
+    public async Task SaveTranscriptSegmentAsync(
+        string campaignId,
+        TranscriptSegmentDocument transcript,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentNullException.ThrowIfNull(transcript);
+        ArgumentException.ThrowIfNullOrWhiteSpace(transcript.SegmentId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var transcripts = await LoadTranscriptsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var existingIndex = transcripts.FindIndex(t =>
+                string.Equals(t.SessionId, transcript.SessionId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(t.SegmentId, transcript.SegmentId, StringComparison.OrdinalIgnoreCase));
+
+            if (existingIndex >= 0)
+            {
+                transcripts[existingIndex] = transcript;
+            }
+            else
+            {
+                transcripts.Add(transcript);
+            }
+
+            await SaveTranscriptsInternalAsync(campaignId, transcripts, cancellationToken).ConfigureAwait(false);
+            await TouchCampaignMeaningfulChangeInternalAsync(campaignId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<TranscriptSegmentDocument?> GetTranscriptSegmentAsync(
+        string campaignId,
+        string sessionId,
+        string segmentId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(campaignId) || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(segmentId))
+        {
+            return null;
+        }
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var transcripts = await LoadTranscriptsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return transcripts.FirstOrDefault(t =>
+                string.Equals(t.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(t.SegmentId, segmentId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<TranscriptSegmentDocument>> ListTranscriptSegmentsAsync(
+        string campaignId,
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(campaignId) || string.IsNullOrWhiteSpace(sessionId))
+        {
+            return [];
+        }
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var transcripts = await LoadTranscriptsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return transcripts
+                .Where(t => string.Equals(t.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.SequenceNumber)
+                .ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task SaveNeedsAttentionItemAsync(
+        string campaignId,
+        NeedsAttentionItem item,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentException.ThrowIfNullOrWhiteSpace(item.Id);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var items = await LoadNeedsAttentionItemsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var existingIndex = items.FindIndex(i => string.Equals(i.Id, item.Id, StringComparison.OrdinalIgnoreCase));
+            if (existingIndex >= 0)
+            {
+                items[existingIndex] = item;
+            }
+            else
+            {
+                items.Add(item);
+            }
+
+            await SaveNeedsAttentionItemsInternalAsync(campaignId, items, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<NeedsAttentionItem>> ListNeedsAttentionItemsAsync(
+        string campaignId,
+        string? sessionId = null,
+        bool unresolvedOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(campaignId))
+        {
+            return [];
+        }
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var items = await LoadNeedsAttentionItemsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var query = items.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                query = query.Where(i => string.Equals(i.SessionId, sessionId, StringComparison.OrdinalIgnoreCase));
+            }
+            if (unresolvedOnly)
+            {
+                query = query.Where(i => !i.IsResolved);
+            }
+            return query.OrderBy(i => i.CreatedAtUtc).ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task ResolveNeedsAttentionItemAsync(
+        string campaignId,
+        string itemId,
+        string resolutionDecision,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(itemId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var items = await LoadNeedsAttentionItemsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var match = items.FirstOrDefault(i => string.Equals(i.Id, itemId, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                match.IsResolved = true;
+                match.ResolutionDecision = resolutionDecision;
+                match.ResolvedAtUtc = DateTimeOffset.UtcNow;
+                await SaveNeedsAttentionItemsInternalAsync(campaignId, items, cancellationToken).ConfigureAwait(false);
+                await TouchCampaignMeaningfulChangeInternalAsync(campaignId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
     /// <summary>
     /// Creates a `.palantyr-backup` ZIP archive containing `manifest.json` (with SHA-256 checksums,
     /// `IncludesRetainedAudio` flag, and privacy notice `NFR-PRIV-007`), `campaign_data.json` / `campaign.ravendbdump`,
@@ -271,13 +448,17 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
             var campaign = await LoadCampaignMetadataInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
             var sessions = await LoadSessionsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
             var entities = await LoadEntitiesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var transcripts = await LoadTranscriptsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var needsAttention = await LoadNeedsAttentionItemsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
 
             var dumpPayload = new CampaignBackupDataPayload(
                 DatabaseName: RavenEmbeddedConfiguration.GetCampaignDatabaseName(campaignId),
                 ExportedAtUtc: nowUtc,
                 Campaign: campaign,
                 Sessions: sessions,
-                MemoryEntities: entities);
+                MemoryEntities: entities,
+                Transcripts: transcripts,
+                NeedsAttentionItems: needsAttention);
 
             var campaignDataJsonBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(dumpPayload, JsonOptions));
             var checksums = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -380,6 +561,12 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
     private string GetEntitiesFilePath(string campaignId) =>
         Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Memory", "memory_entities.json");
 
+    private string GetTranscriptsFilePath(string campaignId) =>
+        Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Transcripts", "transcripts.json");
+
+    private string GetNeedsAttentionFilePath(string campaignId) =>
+        Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Review", "needs_attention.json");
+
     private string GetCampaignSnapshotFilePath(string campaignId) =>
         Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "campaign.json");
 
@@ -421,6 +608,44 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
     {
         var path = GetEntitiesFilePath(campaignId);
         var json = JsonSerializer.Serialize(entities, JsonOptions);
+        await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<List<TranscriptSegmentDocument>> LoadTranscriptsInternalAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var path = GetTranscriptsFilePath(campaignId);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<List<TranscriptSegmentDocument>>(json, JsonOptions) ?? [];
+    }
+
+    private async Task SaveTranscriptsInternalAsync(string campaignId, List<TranscriptSegmentDocument> transcripts, CancellationToken cancellationToken)
+    {
+        var path = GetTranscriptsFilePath(campaignId);
+        var json = JsonSerializer.Serialize(transcripts, JsonOptions);
+        await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<List<NeedsAttentionItem>> LoadNeedsAttentionItemsInternalAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var path = GetNeedsAttentionFilePath(campaignId);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<List<NeedsAttentionItem>>(json, JsonOptions) ?? [];
+    }
+
+    private async Task SaveNeedsAttentionItemsInternalAsync(string campaignId, List<NeedsAttentionItem> items, CancellationToken cancellationToken)
+    {
+        var path = GetNeedsAttentionFilePath(campaignId);
+        var json = JsonSerializer.Serialize(items, JsonOptions);
         await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
     }
 
@@ -582,4 +807,6 @@ public sealed record CampaignBackupDataPayload(
     DateTimeOffset ExportedAtUtc,
     CampaignDocument? Campaign,
     IReadOnlyList<SessionDocument> Sessions,
-    IReadOnlyList<MemoryEntityDocument> MemoryEntities);
+    IReadOnlyList<MemoryEntityDocument> MemoryEntities,
+    IReadOnlyList<TranscriptSegmentDocument>? Transcripts = null,
+    IReadOnlyList<NeedsAttentionItem>? NeedsAttentionItems = null);

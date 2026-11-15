@@ -24,6 +24,9 @@ builder.Services.AddSingleton<IRuntimePriorityScheduler, RuntimePrioritySchedule
 builder.Services.AddSingleton<ISystemAssessmentService, WindowsSystemAssessmentService>();
 builder.Services.AddSingleton<IAudioRecordingEngine, AudioRecordingEngine>();
 builder.Services.AddSingleton<WindowCloseGuardService>();
+builder.Services.AddSingleton<ITranscriptionEngine, LocalWhisperTranscriptionEngine>();
+builder.Services.AddSingleton<IContextClassifier, TwoStageContextClassifier>();
+builder.Services.AddSingleton<ITranscriptionQueue, PersistentTranscriptionQueue>();
 
 var app = builder.Build();
 
@@ -266,6 +269,120 @@ api.MapPost("/campaigns/{id}/memory", async (
 });
 
 // ============================================================================
+// Wave 2: Transcription Pipeline & Context Classification (EPIC-04, EPIC-05)
+// ============================================================================
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/transcription/enqueue", (
+    string id,
+    string sessionId,
+    [FromBody] EnqueueTranscriptionRequest request,
+    ITranscriptionQueue queue) =>
+{
+    queue.EnqueueSegment(new TranscriptionJobRequest(
+        CampaignId: id,
+        SessionId: sessionId,
+        SegmentId: request.SegmentId,
+        AudioFilePath: request.AudioFilePath,
+        Language: request.Language,
+        Priority: request.Priority,
+        FantasyGlossary: request.FantasyGlossary));
+    return Results.Accepted(value: new { Enqueued = true, request.SegmentId });
+});
+
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/transcription/process-next", async (
+    string id,
+    string sessionId,
+    ITranscriptionQueue queue,
+    CancellationToken ct) =>
+{
+    var result = await queue.ProcessNextJobAsync(ct);
+    return result is not null ? Results.Ok(result) : Results.NoContent();
+});
+
+api.MapGet("/campaigns/{id}/sessions/{sessionId}/transcription/queue", (
+    string id,
+    string sessionId,
+    ITranscriptionQueue queue) =>
+{
+    var status = queue.GetQueueStatus(id, sessionId);
+    return Results.Ok(status);
+});
+
+api.MapGet("/campaigns/{id}/sessions/{sessionId}/transcripts", async (
+    string id,
+    string sessionId,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var segments = await memoryStore.ListTranscriptSegmentsAsync(id, sessionId, ct);
+    return Results.Ok(segments);
+});
+
+api.MapGet("/campaigns/{id}/sessions/{sessionId}/transcripts/{segmentId}", async (
+    string id,
+    string sessionId,
+    string segmentId,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var segment = await memoryStore.GetTranscriptSegmentAsync(id, sessionId, segmentId, ct);
+    return segment is not null ? Results.Ok(segment) : Results.NotFound();
+});
+
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/transcripts/{segmentId}/correct", async (
+    string id,
+    string sessionId,
+    string segmentId,
+    [FromBody] CorrectTranscriptSpanRequest request,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var segment = await memoryStore.GetTranscriptSegmentAsync(id, sessionId, segmentId, ct);
+    if (segment is null) return Results.NotFound();
+
+    segment.ApplyCorrection(request.SpanId, request.NewCorrectedText, request.CorrectedBy ?? "DM");
+    await memoryStore.SaveTranscriptSegmentAsync(id, segment, ct);
+    return Results.Ok(segment);
+});
+
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/transcripts/{segmentId}/promote-joke", async (
+    string id,
+    string sessionId,
+    string segmentId,
+    [FromBody] PromoteJokeRequest request,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var segment = await memoryStore.GetTranscriptSegmentAsync(id, sessionId, segmentId, ct);
+    if (segment is null) return Results.NotFound();
+
+    segment.PromoteJokeToCanon(request.SpanId, request.PromotionReason, request.ConfirmedBy ?? "DM");
+    await memoryStore.SaveTranscriptSegmentAsync(id, segment, ct);
+    return Results.Ok(segment);
+});
+
+api.MapGet("/campaigns/{id}/needs-attention", async (
+    string id,
+    [FromQuery] string? sessionId,
+    [FromQuery] bool? unresolvedOnly,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var items = await memoryStore.ListNeedsAttentionItemsAsync(id, sessionId, unresolvedOnly ?? true, ct);
+    return Results.Ok(items);
+});
+
+api.MapPost("/campaigns/{id}/needs-attention/{itemId}/resolve", async (
+    string id,
+    string itemId,
+    [FromBody] ResolveNeedsAttentionRequest request,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    await memoryStore.ResolveNeedsAttentionItemAsync(id, itemId, request.ResolutionDecision, ct);
+    return Results.Ok(new { ItemId = itemId, Resolved = true, request.ResolutionDecision });
+});
+
+// ============================================================================
 // Window Close Guard (NFR-REL-009, AC-REL-004)
 // ============================================================================
 api.MapPost("/window/close-check", async (
@@ -296,5 +413,9 @@ namespace Palantyr.Host
     public sealed record DeleteCampaignRequest(CampaignDeletionOption Option, string? BackupDirectory = null);
     public sealed record DeleteCampaignResponse(string CampaignId, CampaignDeletionOption Option, bool Deleted, string? BackupFilePath);
     public sealed record WindowCloseCheckRequest(WindowCloseResolutionAction? ResolutionAction = null);
+    public sealed record EnqueueTranscriptionRequest(string SegmentId, string AudioFilePath, PalantyrLanguage Language, int Priority = 0, IReadOnlyList<string>? FantasyGlossary = null);
+    public sealed record CorrectTranscriptSpanRequest(string SpanId, string NewCorrectedText, string? CorrectedBy = null);
+    public sealed record PromoteJokeRequest(string SpanId, string PromotionReason, string? ConfirmedBy = null);
+    public sealed record ResolveNeedsAttentionRequest(string ResolutionDecision);
     public partial class Program;
 }

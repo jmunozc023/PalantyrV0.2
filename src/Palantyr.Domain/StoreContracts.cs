@@ -19,7 +19,7 @@ public interface ISystemStore
 }
 
 /// <summary>
-/// Per-campaign store (`Palantyr_Campaign_<Id>` DB) for sessions, lore, and Universal Memory entities.
+/// Per-campaign store (`Palantyr_Campaign_<Id>` DB) for sessions, lore, transcripts, and Universal Memory entities.
 /// </summary>
 public interface ICampaignMemoryStore
 {
@@ -30,4 +30,12 @@ public interface ICampaignMemoryStore
     Task<IReadOnlyList<PartySafeMemoryView>> QueryPartySafeMemoryAsync(string campaignId, QueryVisibilityContext visibilityContext, MemoryEntityType? filterType = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MemoryEntityDocument>> QueryDmFullMemoryAsync(string campaignId, MemoryEntityType? filterType = null, CancellationToken cancellationToken = default);
     Task<string> CreateCampaignBackupAsync(string campaignId, string targetDirectory, bool includeRetainedAudio, CancellationToken cancellationToken = default);
+    
+    // Wave 2: Dual Transcript and Needs Attention persistence (ADR-005, US-04.4, US-05.3)
+    Task SaveTranscriptSegmentAsync(string campaignId, TranscriptSegmentDocument transcript, CancellationToken cancellationToken = default);
+    Task<TranscriptSegmentDocument?> GetTranscriptSegmentAsync(string campaignId, string sessionId, string segmentId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TranscriptSegmentDocument>> ListTranscriptSegmentsAsync(string campaignId, string sessionId, CancellationToken cancellationToken = default);
+    Task SaveNeedsAttentionItemAsync(string campaignId, NeedsAttentionItem item, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<NeedsAttentionItem>> ListNeedsAttentionItemsAsync(string campaignId, string? sessionId = null, bool unresolvedOnly = true, CancellationToken cancellationToken = default);
+    Task ResolveNeedsAttentionItemAsync(string campaignId, string itemId, string resolutionDecision, CancellationToken cancellationToken = default);
 }

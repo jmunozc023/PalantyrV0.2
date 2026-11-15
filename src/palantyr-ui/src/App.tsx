@@ -19,11 +19,14 @@ import {
   SystemAssessmentProfile,
   VisibilityScope,
   WorldLoreEntryDto,
+  TranscriptSegmentDto,
+  NeedsAttentionItemDto,
 } from './types/palantyr';
 import { languageToLocale, translations } from './i18n/translations';
 import { EonixCompanionCard } from './components/EonixCompanionCard';
 import { SubsystemStatusBar } from './components/SubsystemStatusBar';
 import { CreateCampaignWizard } from './components/CreateCampaignWizard';
+import { TranscriptAndReviewPanel } from './components/TranscriptAndReviewPanel';
 import {
   CrashRecoveryModal,
   FirstRunAssessmentModal,
@@ -276,6 +279,73 @@ export const App: React.FC = () => {
   ]);
 
   const [eonixMessages, setEonixMessages] = useState<EonixChatMessage[]>([]);
+
+  const [sampleTranscripts, setSampleTranscripts] = useState<TranscriptSegmentDto[]>([
+    {
+      id: 'transcripts/camp-valen-001/session-004/seg-001',
+      campaignId: 'camp-valen-001',
+      sessionId: 'session-004',
+      segmentId: 'seg-001',
+      sequenceNumber: 1,
+      language: 'Spanish',
+      transcribedAtUtc: '2026-11-14T20:00:00Z',
+      machineUtterances: [
+        {
+          utteranceId: 'utt-101',
+          startMs: 0,
+          endMs: 4200,
+          originalText: 'El DM describe las catacumbas bajo la torre de obsidiana.',
+          confidenceScore: 0.95,
+        },
+        {
+          utteranceId: 'utt-102',
+          startMs: 4300,
+          endMs: 8500,
+          originalText: 'Tira salvación de destreza con ventaja por la antorcha.',
+          confidenceScore: 0.92,
+        },
+        {
+          utteranceId: 'utt-103',
+          startMs: 8600,
+          endMs: 14000,
+          originalText: 'Qué pasaría si vendo el castillo por tres cabras jaja',
+          confidenceScore: 0.88,
+        },
+      ],
+      workingSpans: [
+        {
+          spanId: 'span-101',
+          segmentId: 'seg-001',
+          startMs: 0,
+          endMs: 4200,
+          originalText: 'El DM describe las catacumbas bajo la torre de obsidiana.',
+          correctedText: 'El DM describe las catacumbas bajo la torre de obsidiana.',
+          contextType: 'InWorldCanonCandidate',
+          contextConfidence: 0.95,
+        },
+        {
+          spanId: 'span-102',
+          segmentId: 'seg-001',
+          startMs: 4300,
+          endMs: 8500,
+          originalText: 'Tira salvación de destreza con ventaja por la antorcha.',
+          correctedText: 'Tira salvación de destreza con ventaja por la antorcha.',
+          contextType: 'RulesOrMeta',
+          contextConfidence: 0.92,
+        },
+        {
+          spanId: 'span-103',
+          segmentId: 'seg-001',
+          startMs: 8600,
+          endMs: 14000,
+          originalText: 'Qué pasaría si vendo el castillo por tres cabras jaja',
+          correctedText: 'Qué pasaría si vendo el castillo por tres cabras jaja',
+          contextType: 'HypotheticalOrJoke',
+          contextConfidence: 0.88,
+        },
+      ],
+    },
+  ]);
 
   const locale = languageToLocale(settings.uiLanguage);
   const t = translations[locale];
@@ -810,6 +880,43 @@ export const App: React.FC = () => {
     }));
   };
 
+  const handleCorrectSpan = (segmentId: string, spanId: string, newText: string) => {
+    setSampleTranscripts((prev) =>
+      prev.map((seg) => {
+        if (seg.segmentId !== segmentId) return seg;
+        return {
+          ...seg,
+          workingSpans: seg.workingSpans.map((sp) =>
+            sp.spanId === spanId
+              ? { ...sp, correctedText: newText, isUserEdited: true }
+              : sp
+          ),
+        };
+      })
+    );
+  };
+
+  const handlePromoteJoke = (segmentId: string, spanId: string, reason: string) => {
+    setSampleTranscripts((prev) =>
+      prev.map((seg) => {
+        if (seg.segmentId !== segmentId) return seg;
+        return {
+          ...seg,
+          workingSpans: seg.workingSpans.map((sp) =>
+            sp.spanId === spanId
+              ? {
+                  ...sp,
+                  contextType: 'InWorldCanonCandidate' as const,
+                  isManuallyConfirmed: true,
+                  promotionReason: reason,
+                }
+              : sp
+          ),
+        };
+      })
+    );
+  };
+
   const activeRoster = rosterByCampaign[activeCampaignId] || [];
   const activeLore = loreByCampaign[activeCampaignId] || [];
 
@@ -1331,6 +1438,29 @@ export const App: React.FC = () => {
                 </section>
               </div>
             </div>
+
+            {/* Wave 2: Dual-Layer Transcript & Context Review Panel (EPIC-04, EPIC-05) */}
+            <TranscriptAndReviewPanel
+              t={t}
+              language={settings.uiLanguage}
+              transcripts={sampleTranscripts}
+              needsAttentionItems={attentionItems.map((item) => ({
+                id: item.id,
+                campaignId: activeCampaignId,
+                sessionId: homeStatus.activeSessionId || 'session-004',
+                sourceType: 'ContextAmbiguity',
+                title: item.title,
+                promptMessageEn: item.excerpt,
+                promptMessageEs: item.excerpt,
+                targetSpanId: 'span-103',
+                approximateTimestampMs: 24000,
+                isResolved: false,
+                createdAtUtc: '2026-11-14T20:00:00Z',
+              }))}
+              onCorrectSpan={handleCorrectSpan}
+              onPromoteJoke={handlePromoteJoke}
+              onResolveAttentionItem={handleResolveAttentionItem}
+            />
           </div>
         )}
       </main>
