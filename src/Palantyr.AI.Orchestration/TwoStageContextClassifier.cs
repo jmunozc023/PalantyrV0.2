@@ -260,6 +260,6 @@ public sealed class TwoStageContextClassifier : IContextClassifier
     {
         var bytes = Encoding.UTF8.GetBytes(input);
         var hashBytes = SHA256.HashData(bytes);
-        return Convert.ToHexStringLower(hashBytes);
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 }

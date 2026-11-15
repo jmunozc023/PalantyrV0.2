@@ -1,16 +1,70 @@
+using System.Text.Json.Serialization;
+
 namespace Palantyr.Contracts;
 
 /// <summary>
 /// Tracks AI/ML engine, model, adapter, and prompt/schema versions (FR-TRN-007, NFR-MAINT-003, ARCH-CONSTRAINT-003).
 /// </summary>
-public sealed record ProcessingLineage(
-    string EngineName,
-    string ModelId,
-    string ModelRevision,
-    string AdapterVersion,
-    string PromptVersion,
-    string SchemaVersion,
-    DateTimeOffset ProcessedAtUtc);
+public sealed record ProcessingLineage
+{
+    public string EngineName { get; init; }
+    public string ModelId { get; init; }
+    public string ModelRevision { get; init; }
+    public string AdapterVersion { get; init; }
+    public string PromptVersion { get; init; }
+    public string SchemaVersion { get; init; }
+    public DateTimeOffset ProcessedAtUtc { get; init; }
+    public string? PromptTemplateHash { get; init; }
+
+    [JsonIgnore]
+    public string Engine => EngineName;
+
+    [JsonIgnore]
+    public string PromptTemplateVersion => PromptVersion;
+
+    [JsonIgnore]
+    public DateTimeOffset ExecutedAtUtc => ProcessedAtUtc;
+
+    [JsonConstructor]
+    public ProcessingLineage(
+        string EngineName,
+        string ModelId,
+        string ModelRevision,
+        string AdapterVersion,
+        string PromptVersion,
+        string SchemaVersion,
+        DateTimeOffset ProcessedAtUtc,
+        string? PromptTemplateHash = null)
+    {
+        this.EngineName = EngineName;
+        this.ModelId = ModelId;
+        this.ModelRevision = ModelRevision;
+        this.AdapterVersion = AdapterVersion;
+        this.PromptVersion = PromptVersion;
+        this.SchemaVersion = SchemaVersion;
+        this.ProcessedAtUtc = ProcessedAtUtc;
+        this.PromptTemplateHash = PromptTemplateHash;
+    }
+
+    public ProcessingLineage(
+        string Engine,
+        string ModelId,
+        string AdapterVersion,
+        string PromptTemplateVersion,
+        string PromptTemplateHash,
+        DateTimeOffset ExecutedAtUtc)
+        : this(
+            EngineName: Engine,
+            ModelId: ModelId,
+            ModelRevision: "1.0",
+            AdapterVersion: AdapterVersion,
+            PromptVersion: PromptTemplateVersion,
+            SchemaVersion: "1.0",
+            ProcessedAtUtc: ExecutedAtUtc,
+            PromptTemplateHash: PromptTemplateHash)
+    {
+    }
+}
 
 /// <summary>
 /// Traceability pointer back to transcript or DM source (NFR-TRACE-001, FR-MEM-DM-007).

@@ -1,35 +1,52 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Palantyr.Contracts;
 using Palantyr.Domain;
 
 namespace Palantyr.AI.Orchestration;
 
 /// <summary>
-/// Persistent, priority-aware audio transcription queue and background processor (US-04.3, US-04.5, ADR-008).
-/// Enforces Single-Active-GPU-Worker Mutex via `IRuntimePriorityScheduler` and coordinates downstream context classification.
+/// Persistent, priority-aware audio transcription queue and background processor (US-04.1, US-04.3, US-04.5, ADR-008).
+/// Enforces Single-Active-GPU-Worker Mutex via `IRuntimePriorityScheduler`, persists queue jobs across restarts (`AC-REL-001`),
+/// and coordinates downstream context classification and pause-time catch-up.
 /// </summary>
 public sealed class PersistentTranscriptionQueue : ITranscriptionQueue
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly ConcurrentQueue<TranscriptionJobInternal> _queue = new();
     private readonly ConcurrentDictionary<string, TranscriptionJobInternal> _allJobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly ITranscriptionEngine _transcriptionEngine;
     private readonly IContextClassifier _contextClassifier;
     private readonly ICampaignMemoryStore _memoryStore;
     private readonly IRuntimePriorityScheduler? _scheduler;
+    private readonly string _storageDirectory;
+    private readonly object _diskLock = new();
 
     public PersistentTranscriptionQueue(
         ITranscriptionEngine transcriptionEngine,
         IContextClassifier contextClassifier,
         ICampaignMemoryStore memoryStore,
-        IRuntimePriorityScheduler? scheduler = null)
+        IRuntimePriorityScheduler? scheduler = null,
+        string? queueStorageDirectory = null)
     {
         _transcriptionEngine = transcriptionEngine ?? throw new ArgumentNullException(nameof(transcriptionEngine));
         _contextClassifier = contextClassifier ?? throw new ArgumentNullException(nameof(contextClassifier));
         _memoryStore = memoryStore ?? throw new ArgumentNullException(nameof(memoryStore));
         _scheduler = scheduler;
+        _storageDirectory = string.IsNullOrWhiteSpace(queueStorageDirectory)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Palantyr", "Queue")
+            : Path.GetFullPath(queueStorageDirectory);
+
+        RecoverPendingJobsFromDisk();
     }
 
-    public int PendingCount => _queue.Count;
+    public int PendingCount => _allJobs.Values.Count(j => j.State == SubsystemProcessingState.Pending);
 
     public int ProcessingCount => _allJobs.Values.Count(j => j.State == SubsystemProcessingState.Processing);
 
@@ -49,24 +66,101 @@ public sealed class PersistentTranscriptionQueue : ITranscriptionQueue
 
         _allJobs[jobId] = job;
         _queue.Enqueue(job);
+        PersistJobToDisk(job);
     }
 
     public async Task<TranscriptionJobResult?> ProcessNextJobAsync(CancellationToken cancellationToken = default)
     {
-        if (!_queue.TryDequeue(out var job))
+        while (_queue.TryDequeue(out var job))
         {
-            return null;
+            if (job.State != SubsystemProcessingState.Pending)
+            {
+                continue;
+            }
+
+            // Check if background processing is currently throttled by the scheduler
+            if (_scheduler?.IsBackgroundThrottled == true)
+            {
+                // Re-enqueue for later execution to prevent gaming / VTT frame drops
+                _queue.Enqueue(job);
+                return null;
+            }
+
+            return await ExecuteJobAsync(job, ignoreThrottling: false, cancellationToken).ConfigureAwait(false);
         }
 
-        // Check if background processing is currently throttled by the scheduler
-        if (_scheduler?.IsBackgroundThrottled == true)
+        return null;
+    }
+
+    /// <summary>
+    /// Processes backlog of enqueued segments during session pause based on DM preference (`US-04.5`, `FR-PROC-003`).
+    /// </summary>
+    public async Task<int> ProcessPauseCatchUpAsync(
+        string campaignId,
+        string sessionId,
+        PauseTranscriptionBehavior behavior,
+        CancellationToken cancellationToken = default)
+    {
+        if (behavior == PauseTranscriptionBehavior.Never)
         {
-            // Re-enqueue for later execution to prevent gaming / VTT frame drops
-            _queue.Enqueue(job);
-            return null;
+            return 0;
         }
 
+        int processedCount = 0;
+        var uncompletedForSession = _allJobs.Values
+            .Where(j => j.State == SubsystemProcessingState.Pending &&
+                        string.Equals(j.Request.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(j.Request.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(j => j.EnqueuedAtUtc)
+            .ToList();
+
+        foreach (var job in uncompletedForSession)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var result = await ExecuteJobAsync(job, ignoreThrottling: true, cancellationToken).ConfigureAwait(false);
+            if (result is { Success: true })
+            {
+                processedCount++;
+            }
+        }
+
+        return processedCount;
+    }
+
+    public IReadOnlyList<TranscriptionJobStatusDto> GetQueueStatus(string campaignId, string? sessionId = null)
+    {
+        var query = _allJobs.Values.Where(j => string.Equals(j.Request.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            query = query.Where(j => string.Equals(j.Request.SessionId, sessionId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query
+            .OrderBy(j => j.EnqueuedAtUtc)
+            .Select(j => new TranscriptionJobStatusDto(
+                JobId: j.JobId,
+                CampaignId: j.Request.CampaignId,
+                SessionId: j.Request.SessionId,
+                SegmentId: j.Request.SegmentId,
+                State: j.State,
+                EnqueuedAtUtc: j.EnqueuedAtUtc,
+                CompletedAtUtc: j.CompletedAtUtc,
+                RetryCount: j.RetryCount,
+                ErrorMessage: j.ErrorMessage))
+            .ToList();
+    }
+
+    private async Task<TranscriptionJobResult> ExecuteJobAsync(
+        TranscriptionJobInternal job,
+        bool ignoreThrottling,
+        CancellationToken cancellationToken)
+    {
         job.State = SubsystemProcessingState.Processing;
+        PersistJobToDisk(job);
 
         IDisposable? gpuSlot = null;
         if (_scheduler is not null)
@@ -162,6 +256,7 @@ public sealed class PersistentTranscriptionQueue : ITranscriptionQueue
 
             job.State = SubsystemProcessingState.Completed;
             job.CompletedAtUtc = DateTimeOffset.UtcNow;
+            PersistJobToDisk(job);
 
             return new TranscriptionJobResult(
                 CampaignId: job.Request.CampaignId,
@@ -185,6 +280,8 @@ public sealed class PersistentTranscriptionQueue : ITranscriptionQueue
                 job.ErrorMessage = ex.Message;
             }
 
+            PersistJobToDisk(job);
+
             return new TranscriptionJobResult(
                 CampaignId: job.Request.CampaignId,
                 SessionId: job.Request.SessionId,
@@ -199,27 +296,73 @@ public sealed class PersistentTranscriptionQueue : ITranscriptionQueue
         }
     }
 
-    public IReadOnlyList<TranscriptionJobStatusDto> GetQueueStatus(string campaignId, string? sessionId = null)
+    private void PersistJobToDisk(TranscriptionJobInternal job)
     {
-        var query = _allJobs.Values.Where(j => string.Equals(j.Request.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(sessionId))
+        try
         {
-            query = query.Where(j => string.Equals(j.Request.SessionId, sessionId, StringComparison.OrdinalIgnoreCase));
+            lock (_diskLock)
+            {
+                Directory.CreateDirectory(_storageDirectory);
+                var filePath = Path.Combine(_storageDirectory, $"{SanitizeFileName(job.JobId)}.queue.json");
+                var json = JsonSerializer.Serialize(job, JsonOptions);
+                File.WriteAllText(filePath, json);
+            }
         }
+        catch
+        {
+            // Defensive persistence error suppression
+        }
+    }
 
-        return query
-            .OrderBy(j => j.EnqueuedAtUtc)
-            .Select(j => new TranscriptionJobStatusDto(
-                JobId: j.JobId,
-                CampaignId: j.Request.CampaignId,
-                SessionId: j.Request.SessionId,
-                SegmentId: j.Request.SegmentId,
-                State: j.State,
-                EnqueuedAtUtc: j.EnqueuedAtUtc,
-                CompletedAtUtc: j.CompletedAtUtc,
-                RetryCount: j.RetryCount,
-                ErrorMessage: j.ErrorMessage))
-            .ToList();
+    private void RecoverPendingJobsFromDisk()
+    {
+        try
+        {
+            lock (_diskLock)
+            {
+                if (!Directory.Exists(_storageDirectory))
+                {
+                    return;
+                }
+
+                foreach (var file in Directory.EnumerateFiles(_storageDirectory, "*.queue.json"))
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(file);
+                        var job = JsonSerializer.Deserialize<TranscriptionJobInternal>(json, JsonOptions);
+                        if (job is not null && !string.IsNullOrWhiteSpace(job.JobId))
+                        {
+                            // If it was processing when application stopped/crashed, mark pending for retry
+                            if (job.State == SubsystemProcessingState.Processing)
+                            {
+                                job.State = SubsystemProcessingState.Pending;
+                            }
+
+                            _allJobs[job.JobId] = job;
+                            if (job.State == SubsystemProcessingState.Pending)
+                            {
+                                _queue.Enqueue(job);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore individual corrupt queue entries
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Defensive recovery suppression
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        return new string(name.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray());
     }
 
     private static int ExtractSequenceNumber(string segmentId)

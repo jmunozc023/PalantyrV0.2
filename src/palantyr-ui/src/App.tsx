@@ -1177,7 +1177,7 @@ export const App: React.FC = () => {
                 <h2>{activeCampaign.name}</h2>
                 <div className="campaign-db-meta">
                   <span>
-                    SQLite: <code>{activeCampaign.databaseName}</code>
+                    RavenDB: <code>{activeCampaign.databaseName}</code>
                   </span>
                   {activeCampaign.calendarSystemDescription && (
                     <span>• 📅 {activeCampaign.calendarSystemDescription}</span>

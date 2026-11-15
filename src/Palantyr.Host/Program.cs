@@ -174,11 +174,20 @@ api.MapPost("/campaigns/{id}/sessions/{sessionId}/pause", async (
     string id,
     string sessionId,
     IAudioRecordingEngine recordingEngine,
+    ITranscriptionQueue transcriptionQueue,
+    ISystemStore systemStore,
     WindowCloseGuardService closeGuard,
     CancellationToken ct) =>
 {
     var status = await recordingEngine.PauseSessionRecordingAsync(id, sessionId, ct);
     closeGuard.NotifySessionState(id, sessionId, status.SessionState);
+
+    var settings = await systemStore.GetSettingsAsync(ct);
+    if (settings.PausePreference == PauseTranscriptionBehavior.Always)
+    {
+        _ = transcriptionQueue.ProcessPauseCatchUpAsync(id, sessionId, settings.PausePreference, CancellationToken.None);
+    }
+
     return Results.Ok(status);
 });
 
@@ -305,6 +314,25 @@ api.MapGet("/campaigns/{id}/sessions/{sessionId}/transcription/queue", (
 {
     var status = queue.GetQueueStatus(id, sessionId);
     return Results.Ok(status);
+});
+
+api.MapPost("/campaigns/{id}/sessions/{sessionId}/transcription/pause-catchup", async (
+    string id,
+    string sessionId,
+    ITranscriptionQueue queue,
+    ISystemStore systemStore,
+    [FromQuery] PauseTranscriptionBehavior? behavior,
+    CancellationToken ct) =>
+{
+    var effectiveBehavior = behavior;
+    if (!effectiveBehavior.HasValue)
+    {
+        var settings = await systemStore.GetSettingsAsync(ct);
+        effectiveBehavior = settings.PausePreference;
+    }
+
+    var processed = await queue.ProcessPauseCatchUpAsync(id, sessionId, effectiveBehavior.Value, ct);
+    return Results.Ok(new { ProcessedCount = processed, Behavior = effectiveBehavior.Value.ToString() });
 });
 
 api.MapGet("/campaigns/{id}/sessions/{sessionId}/transcripts", async (

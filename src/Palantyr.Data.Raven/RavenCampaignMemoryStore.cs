@@ -778,7 +778,7 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
     private static string ComputeSha256Hex(byte[] data)
     {
         var hashBytes = SHA256.HashData(data);
-        return Convert.ToHexStringLower(hashBytes);
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 }
 
@@ -807,4 +807,6 @@ public sealed record CampaignBackupDataPayload(
     DateTimeOffset ExportedAtUtc,
     CampaignDocument? Campaign,
     IReadOnlyList<SessionDocument> Sessions,
-    IReadOnlyList<MemoryEntityDocument> MemoryEntities);
+    IReadOnlyList<MemoryEntityDocument> MemoryEntities,
+    IReadOnlyList<TranscriptSegmentDocument>? Transcripts = null,
+    IReadOnlyList<NeedsAttentionItem>? NeedsAttentionItems = null);

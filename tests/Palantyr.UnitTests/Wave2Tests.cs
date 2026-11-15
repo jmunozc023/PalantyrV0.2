@@ -304,6 +304,94 @@ public sealed class Wave2Tests
         }
     }
 
+    [Fact]
+    public async Task US_04_1_AC_REL_001_PersistentTranscriptionQueue_Survives_Restart_And_Recovers_Pending_Jobs()
+    {
+        string tempDir = CreateTempTestDirectory();
+        string queueDir = Path.Combine(tempDir, "QueueStorage");
+        try
+        {
+            var ravenConfig = new RavenEmbeddedConfiguration(tempDir);
+            var memoryStore = new RavenCampaignMemoryStore(ravenConfig);
+            var engine = new LocalWhisperTranscriptionEngine();
+            var classifier = new TwoStageContextClassifier();
+
+            const string campaignId = "camp-restart-test";
+            const string sessionId = "sess-01";
+
+            // Instance 1: Enqueue two jobs and process only one
+            var queue1 = new PersistentTranscriptionQueue(engine, classifier, memoryStore, queueStorageDirectory: queueDir);
+            queue1.EnqueueSegment(new TranscriptionJobRequest(
+                CampaignId: campaignId,
+                SessionId: sessionId,
+                SegmentId: "seg-001",
+                AudioFilePath: "fake1.wav",
+                Language: PalantyrLanguage.Spanish));
+            queue1.EnqueueSegment(new TranscriptionJobRequest(
+                CampaignId: campaignId,
+                SessionId: sessionId,
+                SegmentId: "seg-002",
+                AudioFilePath: "fake2.wav",
+                Language: PalantyrLanguage.Spanish));
+
+            Assert.Equal(2, queue1.PendingCount);
+
+            var firstResult = await queue1.ProcessNextJobAsync();
+            Assert.NotNull(firstResult);
+            Assert.True(firstResult.Success);
+            Assert.Equal(1, queue1.PendingCount);
+
+            // Simulate process termination / restart: Create Instance 2 pointing to same queue storage
+            var queue2 = new PersistentTranscriptionQueue(engine, classifier, memoryStore, queueStorageDirectory: queueDir);
+
+            // Durability check: uncompleted seg-002 recovered from disk (AC-REL-001)
+            Assert.Equal(1, queue2.PendingCount);
+            var secondResult = await queue2.ProcessNextJobAsync();
+            Assert.NotNull(secondResult);
+            Assert.True(secondResult.Success);
+            Assert.Equal("seg-002", secondResult.SegmentId);
+            Assert.Equal(0, queue2.PendingCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task US_04_5_ProcessPauseCatchUp_Respects_Never_Ask_Always_Policies()
+    {
+        string tempDir = CreateTempTestDirectory();
+        try
+        {
+            var ravenConfig = new RavenEmbeddedConfiguration(tempDir);
+            var memoryStore = new RavenCampaignMemoryStore(ravenConfig);
+            var engine = new LocalWhisperTranscriptionEngine();
+            var classifier = new TwoStageContextClassifier();
+            var queue = new PersistentTranscriptionQueue(engine, classifier, memoryStore, queueStorageDirectory: Path.Combine(tempDir, "Queue"));
+
+            const string campaignId = "camp-pause-test";
+            const string sessionId = "sess-pause";
+
+            queue.EnqueueSegment(new TranscriptionJobRequest(campaignId, sessionId, "seg-p1", "f1.wav", PalantyrLanguage.English));
+            queue.EnqueueSegment(new TranscriptionJobRequest(campaignId, sessionId, "seg-p2", "f2.wav", PalantyrLanguage.English));
+
+            // 1. Never policy: no jobs processed during pause (FR-PROC-003)
+            int neverProcessed = await queue.ProcessPauseCatchUpAsync(campaignId, sessionId, PauseTranscriptionBehavior.Never);
+            Assert.Equal(0, neverProcessed);
+            Assert.Equal(2, queue.PendingCount);
+
+            // 2. Always policy: catches up and drains backlog
+            int alwaysProcessed = await queue.ProcessPauseCatchUpAsync(campaignId, sessionId, PauseTranscriptionBehavior.Always);
+            Assert.Equal(2, alwaysProcessed);
+            Assert.Equal(0, queue.PendingCount);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
     private static string CreateTempTestDirectory()
     {
         string path = Path.Combine(Path.GetTempPath(), $"PalantyrWave2Tests_{Guid.NewGuid():N}");

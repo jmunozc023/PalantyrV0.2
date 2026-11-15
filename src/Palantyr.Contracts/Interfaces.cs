@@ -111,6 +111,7 @@ public interface ITranscriptionQueue
     void EnqueueSegment(TranscriptionJobRequest request);
     Task<TranscriptionJobResult?> ProcessNextJobAsync(CancellationToken cancellationToken = default);
     IReadOnlyList<TranscriptionJobStatusDto> GetQueueStatus(string campaignId, string? sessionId = null);
+    Task<int> ProcessPauseCatchUpAsync(string campaignId, string sessionId, PauseTranscriptionBehavior behavior, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
