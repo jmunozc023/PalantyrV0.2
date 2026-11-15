@@ -176,8 +176,8 @@ PalantyrV0.2/
 ```mermaid
 flowchart LR
     W1["Wave 1: First Vertical Slice\n(Recording, WAL, Shell, Safe Delete)\n[DONE]"]
-    W2["Wave 2: Local Transcription & Context\n(Whisper EN/ES, Canon vs Joke Filter)\n[CURRENT]"]
-    W3A["Wave 3A: Core Memory Graph\n(Universal Entities, Epistemic States)"]
+    W2["Wave 2: Local Transcription & Context\n(Whisper EN/ES, Canon vs Joke Filter)\n[DONE]"]
+    W3A["Wave 3A: Core Memory Graph\n(Universal Entities, Epistemic States)\n[CURRENT]"]
     W4["Wave 4: Review, Summaries & Eonix\n(Needs Attention, Party-Safe Summaries)"]
     W3B["Wave 3B: Domain Memory Modules\n(Quests, Orgs, Crafting, Combat)"]
     W5["Wave 5: Backup UI & Hardening\n(Alpha Release Benchmark)"]
