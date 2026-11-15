@@ -27,6 +27,9 @@ public interface ICampaignMemoryStore
     Task<SessionDocument?> GetSessionAsync(string campaignId, string sessionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionDocument>> ListSessionsAsync(string campaignId, CancellationToken cancellationToken = default);
     Task SaveMemoryEntityAsync(string campaignId, MemoryEntityDocument entity, CancellationToken cancellationToken = default);
+    Task<MemoryEntityDocument?> GetMemoryEntityAsync(string campaignId, string entityId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MemoryEntityDocument>> ListMemoryEntitiesAsync(string campaignId, MemoryEntityType? filterType = null, string? searchQuery = null, CancellationToken cancellationToken = default);
+    Task DeleteMemoryEntityAsync(string campaignId, string entityId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PartySafeMemoryView>> QueryPartySafeMemoryAsync(string campaignId, QueryVisibilityContext visibilityContext, MemoryEntityType? filterType = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MemoryEntityDocument>> QueryDmFullMemoryAsync(string campaignId, MemoryEntityType? filterType = null, CancellationToken cancellationToken = default);
     Task<string> CreateCampaignBackupAsync(string campaignId, string targetDirectory, bool includeRetainedAudio, CancellationToken cancellationToken = default);
@@ -38,4 +41,13 @@ public interface ICampaignMemoryStore
     Task SaveNeedsAttentionItemAsync(string campaignId, NeedsAttentionItem item, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<NeedsAttentionItem>> ListNeedsAttentionItemsAsync(string campaignId, string? sessionId = null, bool unresolvedOnly = true, CancellationToken cancellationToken = default);
     Task ResolveNeedsAttentionItemAsync(string campaignId, string itemId, string resolutionDecision, CancellationToken cancellationToken = default);
+
+    // Wave 3A: Entity Resolution, Conflict & Spatiotemporal store operations (US-06.1..06.7)
+    Task SaveResolutionCandidateAsync(string campaignId, EntityResolutionCandidateDto candidate, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<EntityResolutionCandidateDto>> ListResolutionCandidatesAsync(string campaignId, EntityResolutionStatus? statusFilter = null, CancellationToken cancellationToken = default);
+    Task<EntityResolutionCandidateDto?> GetResolutionCandidateAsync(string campaignId, string candidateId, CancellationToken cancellationToken = default);
+    Task SaveConflictAsync(string campaignId, MemoryConflictDto conflict, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MemoryConflictDto>> ListConflictsAsync(string campaignId, string? entityId = null, bool unresolvedOnly = true, CancellationToken cancellationToken = default);
+    Task<MemoryConflictDto?> GetConflictAsync(string campaignId, string conflictId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LocationHierarchyNodeDto>> GetLocationHierarchyTreeAsync(string campaignId, CancellationToken cancellationToken = default);
 }

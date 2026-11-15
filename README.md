@@ -54,7 +54,7 @@ dotnet build Palantyr.sln
 # Run the full vertical slice test suite
 dotnet test Palantyr.sln
 ```
-All 8 test suites in `Wave1VerticalSliceTests.cs` should execute and pass cleanly.
+All 22 automated test suites in `Wave1VerticalSliceTests.cs`, `Wave2Tests.cs`, and `Wave3ATests.cs` execute and pass cleanly.
 
 ---
 
@@ -177,8 +177,8 @@ PalantyrV0.2/
 flowchart LR
     W1["Wave 1: First Vertical Slice\n(Recording, WAL, Shell, Safe Delete)\n[DONE]"]
     W2["Wave 2: Local Transcription & Context\n(Whisper EN/ES, Canon vs Joke Filter)\n[DONE]"]
-    W3A["Wave 3A: Core Memory Graph\n(Universal Entities, Epistemic States)\n[CURRENT]"]
-    W4["Wave 4: Review, Summaries & Eonix\n(Needs Attention, Party-Safe Summaries)"]
+    W3A["Wave 3A: Core Memory Graph\n(Universal Entities, Epistemic States, Memory Codex)\n[DONE]"]
+    W4["Wave 4: Review, Summaries & Eonix\n(Party-Safe Summaries, Q&A Assistant)\n[NEXT]"]
     W3B["Wave 3B: Domain Memory Modules\n(Quests, Orgs, Crafting, Combat)"]
     W5["Wave 5: Backup UI & Hardening\n(Alpha Release Benchmark)"]
 

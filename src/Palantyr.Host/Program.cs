@@ -27,6 +27,7 @@ builder.Services.AddSingleton<WindowCloseGuardService>();
 builder.Services.AddSingleton<ITranscriptionEngine, LocalWhisperTranscriptionEngine>();
 builder.Services.AddSingleton<IContextClassifier, TwoStageContextClassifier>();
 builder.Services.AddSingleton<ITranscriptionQueue, PersistentTranscriptionQueue>();
+builder.Services.AddSingleton<CampaignMemoryService>();
 
 var app = builder.Build();
 
@@ -267,15 +268,6 @@ api.MapGet("/campaigns/{id}/memory/dm-full", async (
     return Results.Ok(entities);
 });
 
-api.MapPost("/campaigns/{id}/memory", async (
-    string id,
-    [FromBody] MemoryEntityDocument entity,
-    ICampaignMemoryStore memoryStore,
-    CancellationToken ct) =>
-{
-    await memoryStore.SaveMemoryEntityAsync(id, entity, ct);
-    return Results.Ok(entity);
-});
 
 // ============================================================================
 // Wave 2: Transcription Pipeline & Context Classification (EPIC-04, EPIC-05)
@@ -411,6 +403,159 @@ api.MapPost("/campaigns/{id}/needs-attention/{itemId}/resolve", async (
 });
 
 // ============================================================================
+// ============================================================================
+// Wave 3A: Core Campaign Memory Graph, Resolution & Conflicts (EPIC-06)
+// ============================================================================
+api.MapGet("/campaigns/{id}/memory", async (
+    string id,
+    [FromQuery] MemoryEntityType? filterType,
+    [FromQuery] string? searchQuery,
+    [FromQuery] string? scope,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    if (string.Equals(scope, "partySafe", StringComparison.OrdinalIgnoreCase))
+    {
+        var safe = await memoryStore.QueryPartySafeMemoryAsync(id, QueryVisibilityContext.PartySafe, filterType, ct);
+        return Results.Ok(safe);
+    }
+
+    var list = await memoryStore.ListMemoryEntitiesAsync(id, filterType, searchQuery, ct);
+    return Results.Ok(list);
+});
+
+api.MapGet("/campaigns/{id}/memory/{entityId}", async (
+    string id,
+    string entityId,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var entity = await memoryStore.GetMemoryEntityAsync(id, entityId, ct);
+    return entity is not null ? Results.Ok(entity) : Results.NotFound();
+});
+
+
+api.MapPut("/campaigns/{id}/memory/{entityId}", async (
+    string id,
+    string entityId,
+    [FromBody] UpdateMemoryEntityRequest request,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var entity = await memoryStore.GetMemoryEntityAsync(id, entityId, ct);
+    if (entity is null) return Results.NotFound();
+
+    if (!string.IsNullOrWhiteSpace(request.CanonicalName)) entity.CanonicalName = request.CanonicalName.Trim();
+    if (request.Aliases is not null) { entity.Aliases.Clear(); entity.Aliases.AddRange(request.Aliases); }
+    if (request.Titles is not null) { entity.Titles.Clear(); entity.Titles.AddRange(request.Titles); }
+    if (request.RecognitionVariants is not null) { entity.RecognitionVariants.Clear(); entity.RecognitionVariants.AddRange(request.RecognitionVariants); }
+    if (request.SummaryDescription is not null) entity.SummaryDescription = request.SummaryDescription;
+    if (request.DmPrivateNotes is not null) entity.DmPrivateNotes = request.DmPrivateNotes;
+    if (request.Visibility.HasValue) entity.Visibility = request.Visibility.Value;
+    if (request.KnowledgeState.HasValue) entity.KnowledgeState = request.KnowledgeState.Value;
+    if (request.Confidence.HasValue) entity.Confidence = request.Confidence.Value;
+
+    await memoryStore.SaveMemoryEntityAsync(id, entity, ct);
+    return Results.Ok(entity);
+});
+
+api.MapDelete("/campaigns/{id}/memory/{entityId}", async (
+    string id,
+    string entityId,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    await memoryStore.DeleteMemoryEntityAsync(id, entityId, ct);
+    return Results.NoContent();
+});
+
+api.MapGet("/campaigns/{id}/memory/resolution/candidates", async (
+    string id,
+    [FromQuery] EntityResolutionStatus? statusFilter,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var candidates = await memoryStore.ListResolutionCandidatesAsync(id, statusFilter, ct);
+    return Results.Ok(candidates);
+});
+
+api.MapPost("/campaigns/{id}/memory/resolution/candidates/{candidateId}/resolve", async (
+    string id,
+    string candidateId,
+    [FromBody] ResolveCandidateRequest request,
+    ICampaignMemoryStore memoryStore,
+    CampaignMemoryService memoryService,
+    CancellationToken ct) =>
+{
+    var candidate = await memoryStore.GetResolutionCandidateAsync(id, candidateId, ct);
+    if (candidate is null) return Results.NotFound();
+
+    var allEntities = await memoryStore.ListMemoryEntitiesAsync(id, null, null, ct);
+    var entityMap = allEntities.ToDictionary(e => e.Id, StringComparer.OrdinalIgnoreCase);
+
+    var updated = memoryService.ApplyResolutionRuling(candidate, request, entityId => entityMap.GetValueOrDefault(entityId));
+    await memoryStore.SaveResolutionCandidateAsync(id, updated, ct);
+
+    if (updated.Status == EntityResolutionStatus.LinkedToExisting && updated.ResolvedEntityId is not null && entityMap.TryGetValue(updated.ResolvedEntityId, out var linkedEntity))
+    {
+        await memoryStore.SaveMemoryEntityAsync(id, linkedEntity, ct);
+    }
+    else if (updated.Status == EntityResolutionStatus.CreatedNewEntity)
+    {
+        var newEntity = new MemoryEntityDocument
+        {
+            Id = $"char_{Guid.NewGuid():N}"[..18],
+            EntityType = MemoryEntityType.Character,
+            CanonicalName = request.NewEntityCanonicalName ?? candidate.ObservedSurfaceName,
+            SummaryDescription = $"Created from candidate '{candidate.ObservedSurfaceName}'"
+        };
+        await memoryStore.SaveMemoryEntityAsync(id, newEntity, ct);
+    }
+
+    return Results.Ok(updated);
+});
+
+api.MapGet("/campaigns/{id}/memory/conflicts", async (
+    string id,
+    [FromQuery] string? entityId,
+    [FromQuery] bool? unresolvedOnly,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var conflicts = await memoryStore.ListConflictsAsync(id, entityId, unresolvedOnly ?? true, ct);
+    return Results.Ok(conflicts);
+});
+
+api.MapPost("/campaigns/{id}/memory/conflicts/{conflictId}/resolve", async (
+    string id,
+    string conflictId,
+    [FromBody] ResolveConflictRequest request,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var conflict = await memoryStore.GetConflictAsync(id, conflictId, ct);
+    if (conflict is null) return Results.NotFound();
+
+    var resolvedConflict = conflict with
+    {
+        State = request.Resolution,
+        DmRuling = request.DmRulingNote,
+        ResolvedAtUtc = DateTimeOffset.UtcNow
+    };
+
+    await memoryStore.SaveConflictAsync(id, resolvedConflict, ct);
+    return Results.Ok(resolvedConflict);
+});
+
+api.MapGet("/campaigns/{id}/memory/locations/hierarchy", async (
+    string id,
+    ICampaignMemoryStore memoryStore,
+    CancellationToken ct) =>
+{
+    var tree = await memoryStore.GetLocationHierarchyTreeAsync(id, ct);
+    return Results.Ok(tree);
+});
+
 // Window Close Guard (NFR-REL-009, AC-REL-004)
 // ============================================================================
 api.MapPost("/window/close-check", async (

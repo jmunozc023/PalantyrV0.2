@@ -232,6 +232,49 @@ export interface TranslationDictionary {
       summaryAudio: string;
     };
   };
+  memoryBrowser: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+    allTypes: string;
+    characterTab: string;
+    locationTab: string;
+    factionTab: string;
+    objectTab: string;
+    questTab: string;
+    journeyTab: string;
+    resolveAsapQueue: string;
+    pendingReviewsCount: string;
+    conflictsQueue: string;
+    unresolvedConflictsCount: string;
+    createNewEntityBtn: string;
+    emptyState: string;
+    dmPrivateBadge: string;
+    partySafeBadge: string;
+    campaignTruthBadge: string;
+    partyBeliefBadge: string;
+    divergentBeliefBadge: string;
+    aliasesLabel: string;
+    speechVariantsLabel: string;
+    breadcrumbLabel: string;
+    statementsByLabel: string;
+    statementsAboutLabel: string;
+    relativeTimelineLabel: string;
+    transitRefLabel: string;
+    resolveModalTitle: string;
+    linkToExistingBtn: string;
+    createEntityBtn: string;
+    registerSpeechVariantBtn: string;
+    dismissBtn: string;
+    conflictModalTitle: string;
+    temporalEvolutionBtn: string;
+    factualContradictionBtn: string;
+    resolveConflictSuccess: string;
+    editEntityTitle: string;
+    saveEntityBtn: string;
+    cancelBtn: string;
+    deleteEntityBtn: string;
+  };
   modals: {
     firstRun: {
       title: string;
@@ -664,6 +707,49 @@ export const translations: Record<LocaleCode, TranslationDictionary> = {
         summaryLore: 'Seeded World Knowledge',
         summaryAudio: 'Configured Audio Capture Device',
       },
+    },
+    memoryBrowser: {
+      title: 'Campaign Memory Codex',
+      subtitle: 'Deterministic lore graph with strict DM authority, epistemic tracking, and entity resolution',
+      searchPlaceholder: 'Search entities, aliases, or facets...',
+      allTypes: 'All Entities',
+      characterTab: 'Characters',
+      locationTab: 'Locations',
+      factionTab: 'Factions',
+      objectTab: 'Artifacts & Items',
+      questTab: 'Quests',
+      journeyTab: 'Journeys & Stays',
+      resolveAsapQueue: 'Resolve ASAP Queue',
+      pendingReviewsCount: 'Pending DM Review',
+      conflictsQueue: 'Lore Conflicts',
+      unresolvedConflictsCount: 'Unresolved Contradictions',
+      createNewEntityBtn: 'New Memory Entity',
+      emptyState: 'No entities match the current filters.',
+      dmPrivateBadge: 'DM Secret',
+      partySafeBadge: 'Party Safe',
+      campaignTruthBadge: 'Canon Truth',
+      partyBeliefBadge: 'Party Belief',
+      divergentBeliefBadge: 'Contradiction / Divergent',
+      aliasesLabel: 'Aliases',
+      speechVariantsLabel: 'Speech Recognition Variants',
+      breadcrumbLabel: 'Location Containment',
+      statementsByLabel: 'Statements BY Character',
+      statementsAboutLabel: 'Statements ABOUT Character',
+      relativeTimelineLabel: 'Relative Narrative Timeline',
+      transitRefLabel: 'Transit Route',
+      resolveModalTitle: 'Resolve Ambiguous Entity Candidate',
+      linkToExistingBtn: 'Link to Existing Entity',
+      createEntityBtn: 'Create as New Entity',
+      registerSpeechVariantBtn: 'Register Speech Variant',
+      dismissBtn: 'Dismiss as Noise',
+      conflictModalTitle: 'Resolve Contradictory Assertions',
+      temporalEvolutionBtn: 'Temporal Evolution (Superseded)',
+      factualContradictionBtn: 'Direct Contradiction (DM Ruling)',
+      resolveConflictSuccess: 'Conflict resolved successfully.',
+      editEntityTitle: 'Edit Memory Entity',
+      saveEntityBtn: 'Save Changes',
+      cancelBtn: 'Cancel',
+      deleteEntityBtn: 'Delete Entity',
     },
     modals: {
       firstRun: {
@@ -1119,6 +1205,49 @@ export const translations: Record<LocaleCode, TranslationDictionary> = {
         summaryLore: 'Conocimiento Inicial del Mundo',
         summaryAudio: 'Dispositivo de Captura Configurado',
       },
+    },
+    memoryBrowser: {
+      title: 'Códice de Memoria de Campaña',
+      subtitle: 'Grafo de lore determinista con estricta autoridad del DM, rastreo epistémico y resolución de entidades',
+      searchPlaceholder: 'Buscar entidades, alias o facetas...',
+      allTypes: 'Todas las Entidades',
+      characterTab: 'Personajes',
+      locationTab: 'Ubicaciones',
+      factionTab: 'Facciones',
+      objectTab: 'Artefactos y Objetos',
+      questTab: 'Misiones',
+      journeyTab: 'Viajes y Estancias',
+      resolveAsapQueue: 'Cola de Resolución Urgente',
+      pendingReviewsCount: 'Pendientes de Revisión del DM',
+      conflictsQueue: 'Conflictos de Lore',
+      unresolvedConflictsCount: 'Contradicciones sin Resolver',
+      createNewEntityBtn: 'Nueva Entidad de Memoria',
+      emptyState: 'No hay entidades que coincidan con los filtros.',
+      dmPrivateBadge: 'Secreto del DM',
+      partySafeBadge: 'Seguro para el Grupo',
+      campaignTruthBadge: 'Verdad Canónica',
+      partyBeliefBadge: 'Creencia del Grupo',
+      divergentBeliefBadge: 'Contradicción / Divergente',
+      aliasesLabel: 'Alias',
+      speechVariantsLabel: 'Variantes de Reconocimiento de Voz',
+      breadcrumbLabel: 'Jerarquía de Ubicación',
+      statementsByLabel: 'Declaraciones POR el Personaje',
+      statementsAboutLabel: 'Declaraciones SOBRE el Personaje',
+      relativeTimelineLabel: 'Línea de Tiempo Narrativa Relativa',
+      transitRefLabel: 'Ruta de Tránsito',
+      resolveModalTitle: 'Resolver Candidato de Entidad Ambiguo',
+      linkToExistingBtn: 'Vincular a Entidad Existente',
+      createEntityBtn: 'Crear como Nueva Entidad',
+      registerSpeechVariantBtn: 'Registrar Variante de Voz',
+      dismissBtn: 'Descartar como Ruido',
+      conflictModalTitle: 'Resolver Aserciones Contradictorias',
+      temporalEvolutionBtn: 'Evolución Temporal (Reemplazada)',
+      factualContradictionBtn: 'Contradicción Directa (Decisión del DM)',
+      resolveConflictSuccess: 'Conflicto resuelto con éxito.',
+      editEntityTitle: 'Editar Entidad de Memoria',
+      saveEntityBtn: 'Guardar Cambios',
+      cancelBtn: 'Cancelar',
+      deleteEntityBtn: 'Eliminar Entidad',
     },
     modals: {
       firstRun: {

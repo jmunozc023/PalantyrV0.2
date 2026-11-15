@@ -27,6 +27,16 @@ import { EonixCompanionCard } from './components/EonixCompanionCard';
 import { SubsystemStatusBar } from './components/SubsystemStatusBar';
 import { CreateCampaignWizard } from './components/CreateCampaignWizard';
 import { TranscriptAndReviewPanel } from './components/TranscriptAndReviewPanel';
+import { MemoryBrowserPanel } from './components/MemoryBrowserPanel';
+import {
+  MemoryEntityDto,
+  EntityResolutionCandidateDto,
+  MemoryConflictDto,
+  CreateMemoryEntityRequest,
+  UpdateMemoryEntityRequest,
+  ResolveCandidateRequest,
+  ResolveConflictRequest,
+} from './types/palantyr';
 import {
   CrashRecoveryModal,
   FirstRunAssessmentModal,
@@ -114,6 +124,162 @@ const INITIAL_CAMPAIGNS: CampaignSummaryDto[] = [
   },
 ];
 
+
+const INITIAL_MEMORY_ENTITIES: MemoryEntityDto[] = [
+  {
+    id: 'char_elminster_01',
+    entityType: 'Character',
+    canonicalName: 'Elminster Aumar',
+    aliases: ['Old Mage', 'Sage of Shadowdale'],
+    titles: ['Chosen of Mystra'],
+    recognitionVariants: ['Elminstir', 'Elminsterr'],
+    summaryDescription: 'A legendary archmage and advisor to rulers throughout Faerun.',
+    dmPrivateNotes: 'Possesses a secret ward stone that bypasses Netherese mythals.',
+    visibility: 'PartyKnown',
+    authorizedCharacterIds: [],
+    knowledgeState: 'CampaignTruth',
+    confidence: 'DMConfirmed',
+    stateAndBeliefHistory: [],
+    sources: [],
+    characterFacet: {
+      roleOrArchetype: 'Archmage',
+      raceOrSpecies: 'Human',
+      physicalDescription: 'Elderly man with a pipe and long gray beard.',
+      affiliations: ['Harpers'],
+      statementsBy: [
+        {
+          statementId: 'stmt_01',
+          sessionId: 'session-001',
+          summaryText: 'The seals on the dwarven mine were broken three centuries ago.',
+          targetSubject: 'Him Kuldir',
+          isByCharacter: true,
+          visibility: 'PartyKnown',
+        },
+      ],
+      statementsAbout: [
+        {
+          statementId: 'stmt_02',
+          sessionId: 'session-002',
+          summaryText: 'Seen walking through the Astral Plane without a silver cord.',
+          isByCharacter: false,
+          visibility: 'PartyKnown',
+        },
+      ],
+    },
+  },
+  {
+    id: 'loc_him_kuldir',
+    entityType: 'Location',
+    canonicalName: 'Him Kuldir Mine',
+    aliases: ['The Deep Delve'],
+    titles: ['Ancient Dwarven Fortress'],
+    recognitionVariants: ['Him Kulder', 'Kim Kuldir'],
+    summaryDescription: 'Abandoned dwarven iron mine carved into the Frostfall Mountains.',
+    visibility: 'PartyKnown',
+    authorizedCharacterIds: [],
+    knowledgeState: 'CampaignTruth',
+    confidence: 'HighConfidence',
+    stateAndBeliefHistory: [],
+    sources: [],
+    locationFacet: {
+      locationType: 'Structure',
+      parentLocationId: 'Frostfall Mountains',
+      enclosedChildIds: ['loc_forge', 'loc_vault'],
+      isTransitPoint: false,
+    },
+  },
+  {
+    id: 'journey_frostfall_01',
+    entityType: 'JourneyOrStay',
+    canonicalName: 'Expedition to Him Kuldir',
+    aliases: ['The Mountain March'],
+    titles: [],
+    recognitionVariants: [],
+    summaryDescription: '14-day trekking journey across the glacial peaks.',
+    visibility: 'PartyKnown',
+    authorizedCharacterIds: [],
+    knowledgeState: 'CampaignTruth',
+    confidence: 'HighConfidence',
+    stateAndBeliefHistory: [],
+    sources: [],
+    journeyFacet: {
+      originLocationId: 'Waterdeep',
+      destinationLocationId: 'Him Kuldir Mine',
+      totalEstimatedDays: 14,
+      currentRelativeDay: 4,
+      relativeTimeMarker: 'Day 4 of 14',
+      departureCampaignDate: null,
+      dayTransitions: [
+        {
+          transitionId: 'trans_01',
+          sessionId: 'session-004',
+          fromRelativeDay: 3,
+          toRelativeDay: 4,
+          narrativeMarkerText: 'Dawn broke over the crags as the blizzard ceased.',
+          detectedAtUtc: '2026-11-14T21:00:00Z',
+        },
+      ],
+      keyMoments: [
+        {
+          momentId: 'km_01',
+          sessionId: 'session-004',
+          relativeDayNumber: 2,
+          summaryText: 'Ambushed by frost mephits near the pass.',
+          participants: ['Kaelen Dawnstrider'],
+        },
+      ],
+    },
+  },
+];
+
+const INITIAL_RESOLUTION_CANDIDATES: EntityResolutionCandidateDto[] = [
+  {
+    candidateId: 'cand_res_001',
+    campaignId: 'camp-valen-001',
+    observedSurfaceName: 'Elminsterr',
+    contextSnippet: 'The old traveler said his name was Elminsterr and carried a pipe.',
+    sourceSessionId: 'session-004',
+    sourceSegmentId: 'seg_002',
+    detectedAtUtc: '2026-11-14T21:30:00Z',
+    status: 'PendingDmReview',
+    potentialMatches: [
+      {
+        entityId: 'char_elminster_01',
+        canonicalName: 'Elminster Aumar',
+        entityType: 'Character',
+        matchScore: 0.9,
+        matchReason: 'LevenshteinDistance',
+      },
+    ],
+  },
+];
+
+const INITIAL_CONFLICTS: MemoryConflictDto[] = [
+  {
+    conflictId: 'conf_bridge_01',
+    campaignId: 'camp-valen-001',
+    entityId: 'loc_bridge_01',
+    conflictType: 'FactualContradiction',
+    summary: 'Contradiction regarding Stone Arch Bridge status',
+    state: 'Unresolved',
+    competingAssertions: [
+      {
+        assertionId: 'ass_01',
+        assertionText: 'The stone bridge is intact and merchant caravans cross daily.',
+        knowledgeState: 'CampaignTruth',
+        confidence: 'HighConfidence',
+        recordedAtUtc: '2026-11-10T18:00:00Z',
+      },
+      {
+        assertionId: 'ass_02',
+        assertionText: 'The bridge collapsed fifty years ago; only ruined pillars remain.',
+        knowledgeState: 'PartyBelief',
+        confidence: 'MediumConfidence',
+        recordedAtUtc: '2026-11-14T21:15:00Z',
+      },
+    ],
+  },
+];
 export const App: React.FC = () => {
   const [screen, setScreen] = useState<TopLevelScreen>('welcome');
   const [systemProfile, setSystemProfile] = useState<SystemAssessmentProfile>(
@@ -139,6 +305,95 @@ export const App: React.FC = () => {
   const [showWindowCloseGuard, setShowWindowCloseGuard] =
     useState<boolean>(false);
   const [showPauseAskBanner, setShowPauseAskBanner] = useState<boolean>(false);
+  const [workspaceView, setWorkspaceView] = useState<'console' | 'transcripts' | 'memory'>('console');
+  const [memoryEntities, setMemoryEntities] = useState<MemoryEntityDto[]>(INITIAL_MEMORY_ENTITIES);
+  const [resolutionCandidates, setResolutionCandidates] = useState<EntityResolutionCandidateDto[]>(INITIAL_RESOLUTION_CANDIDATES);
+  const [memoryConflicts, setMemoryConflicts] = useState<MemoryConflictDto[]>(INITIAL_CONFLICTS);
+
+  const handleSaveMemoryEntity = (req: CreateMemoryEntityRequest | UpdateMemoryEntityRequest, entityId?: string) => {
+    if (entityId) {
+      setMemoryEntities((prev) =>
+        prev.map((e) =>
+          e.id === entityId
+            ? {
+                ...e,
+                canonicalName: req.canonicalName || e.canonicalName,
+                aliases: req.aliases || e.aliases,
+                summaryDescription: req.summaryDescription !== undefined ? req.summaryDescription : e.summaryDescription,
+                dmPrivateNotes: req.dmPrivateNotes !== undefined ? req.dmPrivateNotes : e.dmPrivateNotes,
+                visibility: req.visibility || e.visibility,
+              }
+            : e
+        )
+      );
+    } else {
+      const createReq = req as CreateMemoryEntityRequest;
+      const newEntity: MemoryEntityDto = {
+        id: `entity_${Date.now()}`,
+        entityType: createReq.entityType,
+        canonicalName: createReq.canonicalName,
+        aliases: createReq.aliases || [],
+        titles: createReq.titles || [],
+        recognitionVariants: createReq.recognitionVariants || [],
+        summaryDescription: createReq.summaryDescription || '',
+        dmPrivateNotes: createReq.dmPrivateNotes,
+        visibility: createReq.visibility || 'PartyKnown',
+        authorizedCharacterIds: [],
+        knowledgeState: createReq.knowledgeState || 'CampaignTruth',
+        confidence: createReq.confidence || 'HighConfidence',
+        stateAndBeliefHistory: [],
+        sources: [],
+      };
+      setMemoryEntities((prev) => [newEntity, ...prev]);
+    }
+  };
+
+  const handleDeleteMemoryEntity = (entityId: string) => {
+    setMemoryEntities((prev) => prev.filter((e) => e.id !== entityId));
+  };
+
+  const handleResolveEntityCandidate = (candidateId: string, req: ResolveCandidateRequest) => {
+    setResolutionCandidates((prev) =>
+      prev.map((c) =>
+        c.candidateId === candidateId
+          ? {
+              ...c,
+              status: req.action === 'Dismiss' ? 'Dismissed' : req.action === 'CreateNew' ? 'CreatedNewEntity' : 'LinkedToExisting',
+              resolvedEntityId: req.targetEntityId || null,
+              resolutionDecision: `${req.action} by DM`,
+            }
+          : c
+      )
+    );
+    if (req.registerAsSpeechVariant && req.targetEntityId) {
+      const cand = resolutionCandidates.find((c) => c.candidateId === candidateId);
+      if (cand) {
+        setMemoryEntities((prev) =>
+          prev.map((e) =>
+            e.id === req.targetEntityId
+              ? { ...e, recognitionVariants: [...e.recognitionVariants, cand.observedSurfaceName] }
+              : e
+          )
+        );
+      }
+    }
+  };
+
+  const handleResolveLoreConflict = (conflictId: string, req: ResolveConflictRequest) => {
+    setMemoryConflicts((prev) =>
+      prev.map((c) =>
+        c.conflictId === conflictId
+          ? {
+              ...c,
+              state: req.resolution,
+              dmRuling: req.dmRulingNote,
+              resolvedAtUtc: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+  };
+
 
   // Campaign Home Persistent State (UX-CAM-001..003, UX-HOME-001..009)
   const [homeStatus, setHomeStatus] = useState<CampaignHomeStatusDto>({
@@ -1299,8 +1554,38 @@ export const App: React.FC = () => {
               t={t}
             />
 
-            {/* Main Two-Column Campaign Home Layout: Left = Eonix Companion & Ask/Teach, Right = Roster, Lore & Needs Attention */}
-            <div className="campaign-home-columns">
+            {/* Wave 3A: Workspace View Switcher (Session Console, Dual Transcripts, Memory Codex) */}
+            <div className="workspace-view-switcher">
+              <button
+                type="button"
+                className={`view-switcher-tab ${workspaceView === 'console' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('console')}
+              >
+                🎙️ {settings.uiLanguage === 'Spanish' ? 'Consola de Sesión' : 'Session Console'}
+              </button>
+              <button
+                type="button"
+                className={`view-switcher-tab ${workspaceView === 'transcripts' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('transcripts')}
+              >
+                📜 {settings.uiLanguage === 'Spanish' ? 'Transcripciones Duales' : 'Dual Transcripts'}
+              </button>
+              <button
+                type="button"
+                className={`view-switcher-tab ${workspaceView === 'memory' ? 'active' : ''}`}
+                onClick={() => setWorkspaceView('memory')}
+              >
+                📚 {t.memoryBrowser.title}
+                {resolutionCandidates.filter((c) => c.status === 'PendingDmReview').length > 0 && (
+                  <span className="tab-bubble alert">
+                    {resolutionCandidates.filter((c) => c.status === 'PendingDmReview').length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {workspaceView === 'console' && (
+              <div className="campaign-home-columns">
               <div className="campaign-col-primary">
                 <EonixCompanionCard
                   eonixState={homeStatus.eonixVisualState}
@@ -1438,29 +1723,46 @@ export const App: React.FC = () => {
                 </section>
               </div>
             </div>
+            )}
 
-            {/* Wave 2: Dual-Layer Transcript & Context Review Panel (EPIC-04, EPIC-05) */}
-            <TranscriptAndReviewPanel
-              t={t}
-              language={settings.uiLanguage}
-              transcripts={sampleTranscripts}
-              needsAttentionItems={attentionItems.map((item) => ({
-                id: item.id,
-                campaignId: activeCampaignId,
-                sessionId: homeStatus.activeSessionId || 'session-004',
-                sourceType: 'ContextAmbiguity',
-                title: item.title,
-                promptMessageEn: item.excerpt,
-                promptMessageEs: item.excerpt,
-                targetSpanId: 'span-103',
-                approximateTimestampMs: 24000,
-                isResolved: false,
-                createdAtUtc: '2026-11-14T20:00:00Z',
-              }))}
-              onCorrectSpan={handleCorrectSpan}
-              onPromoteJoke={handlePromoteJoke}
-              onResolveAttentionItem={handleResolveAttentionItem}
-            />
+            {workspaceView === 'transcripts' && (
+              <TranscriptAndReviewPanel
+                t={t}
+                language={settings.uiLanguage}
+                transcripts={sampleTranscripts}
+                needsAttentionItems={attentionItems.map((item) => ({
+                  id: item.id,
+                  campaignId: activeCampaignId,
+                  sessionId: homeStatus.activeSessionId || 'session-004',
+                  sourceType: 'ContextAmbiguity',
+                  title: item.title,
+                  promptMessageEn: item.excerpt,
+                  promptMessageEs: item.excerpt,
+                  targetSpanId: 'span-103',
+                  approximateTimestampMs: 24000,
+                  isResolved: false,
+                  createdAtUtc: '2026-11-14T20:00:00Z',
+                }))}
+                onCorrectSpan={handleCorrectSpan}
+                onPromoteJoke={handlePromoteJoke}
+                onResolveAttentionItem={handleResolveAttentionItem}
+              />
+            )}
+
+            {workspaceView === 'memory' && (
+              <MemoryBrowserPanel
+                t={t}
+                language={settings.uiLanguage}
+                campaignId={activeCampaignId}
+                entities={memoryEntities}
+                resolutionCandidates={resolutionCandidates}
+                conflicts={memoryConflicts}
+                onSaveEntity={handleSaveMemoryEntity}
+                onDeleteEntity={handleDeleteMemoryEntity}
+                onResolveCandidate={handleResolveEntityCandidate}
+                onResolveConflict={handleResolveLoreConflict}
+              />
+            )}
           </div>
         )}
       </main>

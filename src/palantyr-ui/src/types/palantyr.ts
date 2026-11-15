@@ -356,3 +356,265 @@ export interface TranscriptionJobStatusDto {
   retryCount: number;
   errorMessage: string | null;
 }
+
+
+// ============================================================================
+
+export interface ProvenanceRef {
+  sourceType: ProvenanceSourceType;
+  sessionId?: string | null;
+  segmentId?: string | null;
+  spanId?: string | null;
+  startTimestampMs?: number | null;
+  endTimestampMs?: number | null;
+  recordedAtUtc: string;
+  noteOrContext?: string | null;
+}
+
+export interface FirstAppearanceRef {
+  sessionId: string;
+  segmentId?: string | null;
+  spanId?: string | null;
+  approximateTimestampMs?: number | null;
+  recordedAtUtc: string;
+}
+
+export interface MemoryHistoryItemDto {
+  historyItemId: string;
+  description: string;
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+  visibility: VisibilityScope;
+  validFromSessionId?: string | null;
+  validToSessionId?: string | null;
+  relativeTimeContext?: string | null;
+  supersededByHistoryItemId?: string | null;
+  recordedAtUtc: string;
+  authorizedCharacterIds?: string[] | null;
+}
+
+// Wave 3A: Core Campaign Memory Graph, Spatiotemporal & Authority Types
+// ============================================================================
+
+export type LocationType =
+  | 'Settlement'
+  | 'Structure'
+  | 'Room'
+  | 'GeographicFeature'
+  | 'Region'
+  | 'TransitWaypoint';
+
+export interface CharacterStatementDto {
+  statementId: string;
+  sessionId: string;
+  segmentId?: string | null;
+  spanId?: string | null;
+  timestampMs?: number | null;
+  summaryText: string;
+  targetSubject?: string | null;
+  isByCharacter: boolean;
+  visibility: VisibilityScope;
+}
+
+export interface CharacterFacetDto {
+  raceOrSpecies?: string | null;
+  physicalDescription?: string | null;
+  roleOrArchetype?: string | null;
+  affiliations: string[];
+  statementsBy: CharacterStatementDto[];
+  statementsAbout: CharacterStatementDto[];
+}
+
+export interface TransitLocationRefDto {
+  originLocationId: string;
+  destinationLocationId: string;
+  routeName?: string | null;
+  transitDurationDays?: number | null;
+}
+
+export interface LocationFacetDto {
+  locationType: LocationType;
+  parentLocationId?: string | null;
+  enclosedChildIds: string[];
+  isTransitPoint: boolean;
+  transitEndpoints?: TransitLocationRefDto | null;
+}
+
+export interface RelativeDayTransitionDto {
+  transitionId: string;
+  sessionId: string;
+  segmentId?: string | null;
+  fromRelativeDay: number;
+  toRelativeDay: number;
+  narrativeMarkerText: string;
+  detectedAtUtc: string;
+}
+
+export interface KeyMomentRefDto {
+  momentId: string;
+  sessionId: string;
+  timestampMs?: number | null;
+  summaryText: string;
+  relativeDayNumber?: number | null;
+  participants: string[];
+}
+
+export interface JourneyFacetDto {
+  parentJourneyId?: string | null;
+  originLocationId?: string | null;
+  destinationLocationId?: string | null;
+  totalEstimatedDays?: number | null;
+  currentRelativeDay?: number | null;
+  relativeTimeMarker?: string | null;
+  departureCampaignDate?: string | null;
+  arrivalCampaignDate?: string | null;
+  dayTransitions: RelativeDayTransitionDto[];
+  keyMoments: KeyMomentRefDto[];
+}
+
+export interface LocationHierarchyNodeDto {
+  locationId: string;
+  canonicalName: string;
+  locationType: LocationType;
+  parentLocationId?: string | null;
+  breadcrumbPath: string;
+  children: LocationHierarchyNodeDto[];
+}
+
+export type EntityResolutionStatus =
+  | 'PendingDmReview'
+  | 'LinkedToExisting'
+  | 'CreatedNewEntity'
+  | 'Dismissed';
+
+export type ResolutionMatchReason =
+  | 'ExactAliasMatch'
+  | 'PhoneticSimilarity'
+  | 'LevenshteinDistance'
+  | 'KnownSpeechVariant';
+
+export interface CandidateMatchDto {
+  entityId: string;
+  canonicalName: string;
+  entityType: MemoryEntityType;
+  matchScore: number;
+  matchReason: ResolutionMatchReason;
+}
+
+export interface EntityResolutionCandidateDto {
+  candidateId: string;
+  campaignId: string;
+  observedSurfaceName: string;
+  contextSnippet?: string | null;
+  sourceSessionId?: string | null;
+  sourceSegmentId?: string | null;
+  sourceSpanId?: string | null;
+  detectedAtUtc: string;
+  status: EntityResolutionStatus;
+  potentialMatches: CandidateMatchDto[];
+  resolvedEntityId?: string | null;
+  resolutionDecision?: string | null;
+}
+
+export interface ResolveCandidateRequest {
+  action: 'LinkToExisting' | 'CreateNew' | 'AcousticCorrection' | 'Dismiss';
+  targetEntityId?: string | null;
+  newEntityCanonicalName?: string | null;
+  registerAsSpeechVariant?: boolean;
+  dmNotes?: string | null;
+  decidedBy?: string;
+}
+
+export type ConflictType =
+  | 'FactualContradiction'
+  | 'TemporalEvolution'
+  | 'DivergentBelief';
+
+export type ConflictResolutionState =
+  | 'Unresolved'
+  | 'ResolvedSuperseded'
+  | 'ResolvedCoexistingBeliefs'
+  | 'ResolvedDmRuling';
+
+export interface CompetingAssertionDto {
+  assertionId: string;
+  assertionText: string;
+  sourceRef?: ProvenanceRef | null;
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+  recordedAtUtc: string;
+}
+
+export interface MemoryConflictDto {
+  conflictId: string;
+  campaignId: string;
+  entityId: string;
+  conflictType: ConflictType;
+  summary: string;
+  competingAssertions: CompetingAssertionDto[];
+  state: ConflictResolutionState;
+  dmRuling?: string | null;
+  resolvedAtUtc?: string | null;
+}
+
+export interface ResolveConflictRequest {
+  resolution: ConflictResolutionState;
+  winningAssertionId?: string | null;
+  dmRulingNote?: string | null;
+  decidedBy?: string;
+}
+
+export interface MemoryEntityDto {
+  id: string;
+  entityType: MemoryEntityType;
+  canonicalName: string;
+  aliases: string[];
+  titles: string[];
+  recognitionVariants: string[];
+  summaryDescription: string;
+  dmPrivateNotes?: string | null;
+  visibility: VisibilityScope;
+  authorizedCharacterIds: string[];
+  knowledgeState: KnowledgeState;
+  confidence: ConfidenceLevel;
+  firstAppearance?: FirstAppearanceRef | null;
+  characterFacet?: CharacterFacetDto | null;
+  locationFacet?: LocationFacetDto | null;
+  journeyFacet?: JourneyFacetDto | null;
+  stateAndBeliefHistory: MemoryHistoryItemDto[];
+  sources: ProvenanceRef[];
+}
+
+export interface CreateMemoryEntityRequest {
+  entityType: MemoryEntityType;
+  canonicalName: string;
+  aliases?: string[];
+  titles?: string[];
+  recognitionVariants?: string[];
+  summaryDescription?: string;
+  dmPrivateNotes?: string;
+  visibility?: VisibilityScope;
+  authorizedCharacterIds?: string[];
+  knowledgeState?: KnowledgeState;
+  confidence?: ConfidenceLevel;
+  firstAppearance?: FirstAppearanceRef;
+  characterFacet?: CharacterFacetDto;
+  locationFacet?: LocationFacetDto;
+  journeyFacet?: JourneyFacetDto;
+}
+
+export interface UpdateMemoryEntityRequest {
+  canonicalName?: string;
+  aliases?: string[];
+  titles?: string[];
+  recognitionVariants?: string[];
+  summaryDescription?: string;
+  dmPrivateNotes?: string;
+  visibility?: VisibilityScope;
+  authorizedCharacterIds?: string[];
+  knowledgeState?: KnowledgeState;
+  confidence?: ConfidenceLevel;
+  characterFacet?: CharacterFacetDto;
+  locationFacet?: LocationFacetDto;
+  journeyFacet?: JourneyFacetDto;
+}

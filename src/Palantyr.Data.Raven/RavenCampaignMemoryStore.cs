@@ -241,6 +241,296 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
         }
     }
 
+    public async Task<MemoryEntityDocument?> GetMemoryEntityAsync(
+        string campaignId,
+        string entityId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entityId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var entities = await LoadEntitiesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return entities.FirstOrDefault(e => string.Equals(e.Id, entityId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<MemoryEntityDocument>> ListMemoryEntitiesAsync(
+        string campaignId,
+        MemoryEntityType? filterType = null,
+        string? searchQuery = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var entities = await LoadEntitiesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var query = entities.AsEnumerable();
+
+            if (filterType.HasValue)
+            {
+                query = query.Where(e => e.EntityType == filterType.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var q = searchQuery.Trim();
+                query = query.Where(e =>
+                    e.CanonicalName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    e.Aliases.Any(a => a.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                    e.Titles.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                    e.SummaryDescription.Contains(q, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return query.OrderBy(e => e.CanonicalName).ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task DeleteMemoryEntityAsync(
+        string campaignId,
+        string entityId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entityId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var entities = await LoadEntitiesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            int removed = entities.RemoveAll(e => string.Equals(e.Id, entityId, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+            {
+                await SaveEntitiesInternalAsync(campaignId, entities, cancellationToken).ConfigureAwait(false);
+                await TouchCampaignMeaningfulChangeInternalAsync(campaignId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task SaveResolutionCandidateAsync(
+        string campaignId,
+        EntityResolutionCandidateDto candidate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var candidates = await LoadResolutionCandidatesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var index = candidates.FindIndex(c => string.Equals(c.CandidateId, candidate.CandidateId, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                candidates[index] = candidate;
+            }
+            else
+            {
+                candidates.Add(candidate);
+            }
+
+            await SaveResolutionCandidatesInternalAsync(campaignId, candidates, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<EntityResolutionCandidateDto>> ListResolutionCandidatesAsync(
+        string campaignId,
+        EntityResolutionStatus? statusFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var candidates = await LoadResolutionCandidatesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            if (statusFilter.HasValue)
+            {
+                return candidates.Where(c => c.Status == statusFilter.Value).OrderByDescending(c => c.DetectedAtUtc).ToList();
+            }
+
+            return candidates.OrderByDescending(c => c.DetectedAtUtc).ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<EntityResolutionCandidateDto?> GetResolutionCandidateAsync(
+        string campaignId,
+        string candidateId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var candidates = await LoadResolutionCandidatesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return candidates.FirstOrDefault(c => string.Equals(c.CandidateId, candidateId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task SaveConflictAsync(
+        string campaignId,
+        MemoryConflictDto conflict,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentNullException.ThrowIfNull(conflict);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var conflicts = await LoadConflictsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var index = conflicts.FindIndex(c => string.Equals(c.ConflictId, conflict.ConflictId, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                conflicts[index] = conflict;
+            }
+            else
+            {
+                conflicts.Add(conflict);
+            }
+
+            await SaveConflictsInternalAsync(campaignId, conflicts, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<MemoryConflictDto>> ListConflictsAsync(
+        string campaignId,
+        string? entityId = null,
+        bool unresolvedOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var conflicts = await LoadConflictsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var query = conflicts.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(entityId))
+            {
+                query = query.Where(c => string.Equals(c.EntityId, entityId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (unresolvedOnly)
+            {
+                query = query.Where(c => c.State == ConflictResolutionState.Unresolved);
+            }
+
+            return query.ToList();
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<MemoryConflictDto?> GetConflictAsync(
+        string campaignId,
+        string conflictId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(conflictId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var conflicts = await LoadConflictsInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            return conflicts.FirstOrDefault(c => string.Equals(c.ConflictId, conflictId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<LocationHierarchyNodeDto>> GetLocationHierarchyTreeAsync(
+        string campaignId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(campaignId);
+
+        await _mutex.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var entities = await LoadEntitiesInternalAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            var locations = entities.Where(e => e.EntityType == MemoryEntityType.Location).ToList();
+            var locationMap = locations.ToDictionary(l => l.Id, StringComparer.OrdinalIgnoreCase);
+
+            (string Name, string? ParentId)? Resolver(string id) =>
+                locationMap.TryGetValue(id, out var loc) ? (loc.CanonicalName, loc.LocationFacet?.ParentLocationId) : null;
+
+            LocationHierarchyNodeDto BuildNode(MemoryEntityDocument loc)
+            {
+                var locType = loc.LocationFacet?.LocationType ?? LocationType.Settlement;
+                var parentId = loc.LocationFacet?.ParentLocationId;
+                var breadcrumb = LocationFacet.ComputeBreadcrumb(loc.Id, loc.CanonicalName, Resolver);
+
+                var children = locations
+                    .Where(c => string.Equals(c.LocationFacet?.ParentLocationId, loc.Id, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(c => c.CanonicalName)
+                    .Select(BuildNode)
+                    .ToList();
+
+                return new LocationHierarchyNodeDto(
+                    LocationId: loc.Id,
+                    CanonicalName: loc.CanonicalName,
+                    LocationType: locType,
+                    ParentLocationId: parentId,
+                    BreadcrumbPath: breadcrumb,
+                    Children: children);
+            }
+
+            var rootLocations = locations
+                .Where(l => string.IsNullOrWhiteSpace(l.LocationFacet?.ParentLocationId) ||
+                            !locationMap.ContainsKey(l.LocationFacet.ParentLocationId))
+                .OrderBy(l => l.CanonicalName)
+                .Select(BuildNode)
+                .ToList();
+
+            return rootLocations;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
     public async Task SaveTranscriptSegmentAsync(
         string campaignId,
         TranscriptSegmentDocument transcript,
@@ -566,6 +856,51 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
 
     private string GetNeedsAttentionFilePath(string campaignId) =>
         Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Review", "needs_attention.json");
+
+    private string GetResolutionCandidatesFilePath(string campaignId) =>
+        Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Memory", "resolution_candidates.json");
+
+    private string GetConflictsFilePath(string campaignId) =>
+        Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "Memory", "memory_conflicts.json");
+
+    private async Task<List<EntityResolutionCandidateDto>> LoadResolutionCandidatesInternalAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var path = GetResolutionCandidatesFilePath(campaignId);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<List<EntityResolutionCandidateDto>>(json, JsonOptions) ?? [];
+    }
+
+    private async Task SaveResolutionCandidatesInternalAsync(string campaignId, List<EntityResolutionCandidateDto> items, CancellationToken cancellationToken)
+    {
+        var path = GetResolutionCandidatesFilePath(campaignId);
+        var json = JsonSerializer.Serialize(items, JsonOptions);
+        await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<List<MemoryConflictDto>> LoadConflictsInternalAsync(string campaignId, CancellationToken cancellationToken)
+    {
+        var path = GetConflictsFilePath(campaignId);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<List<MemoryConflictDto>>(json, JsonOptions) ?? [];
+    }
+
+    private async Task SaveConflictsInternalAsync(string campaignId, List<MemoryConflictDto> items, CancellationToken cancellationToken)
+    {
+        var path = GetConflictsFilePath(campaignId);
+        var json = JsonSerializer.Serialize(items, JsonOptions);
+        await RavenSystemStore.WriteFileAtomicallyAsync(path, json, cancellationToken).ConfigureAwait(false);
+    }
+
 
     private string GetCampaignSnapshotFilePath(string campaignId) =>
         Path.Combine(_config.GetCampaignDirectoryPath(campaignId), "campaign.json");

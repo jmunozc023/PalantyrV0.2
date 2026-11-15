@@ -16,10 +16,24 @@ public sealed record MemoryHistoryItem(
     string? RelativeTimeContext,
     string? SupersededByHistoryItemId,
     DateTimeOffset RecordedAtUtc,
-    IReadOnlyList<string>? AuthorizedCharacterIds = null);
+    IReadOnlyList<string>? AuthorizedCharacterIds = null)
+{
+    public MemoryHistoryItemDto ToDto() => new(
+        HistoryItemId: HistoryItemId,
+        Description: Description,
+        KnowledgeState: KnowledgeState,
+        Confidence: Confidence,
+        Visibility: Visibility,
+        ValidFromSessionId: ValidFromSessionId,
+        ValidToSessionId: ValidToSessionId,
+        RelativeTimeContext: RelativeTimeContext,
+        SupersededByHistoryItemId: SupersededByHistoryItemId,
+        RecordedAtUtc: RecordedAtUtc,
+        AuthorizedCharacterIds: AuthorizedCharacterIds);
+}
 
 /// <summary>
-/// Universal Memory Document persisted in RavenDB per campaign (ADR-004).
+/// Universal Memory Document persisted in RavenDB per campaign (ADR-004, US-06.1..06.7).
 /// </summary>
 public sealed class MemoryEntityDocument
 {
@@ -41,8 +55,34 @@ public sealed class MemoryEntityDocument
     public List<ProvenanceRef> Sources { get; init; } = [];
     public ProcessingLineage? Lineage { get; set; }
 
+    // Wave 3A polymorphic facets (US-06.2, US-06.3, US-06.4)
+    public CharacterFacet? CharacterFacet { get; set; }
+    public LocationFacet? LocationFacet { get; set; }
+    public JourneyFacet? JourneyFacet { get; set; }
+
+    public MemoryEntityDto ToDto() => new(
+        Id: Id,
+        EntityType: EntityType,
+        CanonicalName: CanonicalName,
+        Aliases: Aliases.ToList(),
+        Titles: Titles.ToList(),
+        RecognitionVariants: RecognitionVariants.ToList(),
+        SummaryDescription: SummaryDescription,
+        DmPrivateNotes: DmPrivateNotes,
+        Visibility: Visibility,
+        AuthorizedCharacterIds: AuthorizedCharacterIds.ToList(),
+        KnowledgeState: KnowledgeState,
+        Confidence: Confidence,
+        InternalConfidenceScore: InternalConfidenceScore,
+        FirstAppearance: FirstAppearance,
+        StateAndBeliefHistory: StateAndBeliefHistory.Select(h => h.ToDto()).ToList(),
+        Sources: Sources.ToList(),
+        Lineage: Lineage,
+        CharacterFacet: CharacterFacet?.ToDto());
+
     /// <summary>
     /// Projects a Party-Safe or Character-Scoped view BEFORE any prompt or UI consumer sees the object (ADR-006, Kaede Finding 3).
+    /// Enforces zero leakage of DMPrivate notes, recognition variants, and private sub-history items.
     /// </summary>
     public PartySafeMemoryView? ToPartySafeView(QueryVisibilityContext context)
     {
@@ -61,6 +101,10 @@ public sealed class MemoryEntityDocument
                         && (context.IncludeDmPrivate || h.KnowledgeState != KnowledgeState.DMPrivateTruth))
             .ToList();
 
+        var safeCharacterFacet = CharacterFacet?.ToPartySafeDto(context);
+        var safeLocationFacet = LocationFacet?.ToPartySafeDto(context);
+        var safeJourneyFacet = JourneyFacet?.ToPartySafeDto(context);
+
         return new PartySafeMemoryView(
             Id: Id,
             EntityType: EntityType,
@@ -73,7 +117,10 @@ public sealed class MemoryEntityDocument
             Confidence: Confidence,
             FirstAppearance: FirstAppearance,
             StateAndBeliefHistory: allowedHistory,
-            Sources: Sources.ToList());
+            Sources: Sources.ToList(),
+            CharacterFacet: safeCharacterFacet,
+            LocationFacet: safeLocationFacet,
+            JourneyFacet: safeJourneyFacet);
     }
 }
 
@@ -92,7 +139,10 @@ public sealed record PartySafeMemoryView(
     ConfidenceLevel Confidence,
     FirstAppearanceRef? FirstAppearance,
     IReadOnlyList<MemoryHistoryItem> StateAndBeliefHistory,
-    IReadOnlyList<ProvenanceRef> Sources);
+    IReadOnlyList<ProvenanceRef> Sources,
+    CharacterFacetDto? CharacterFacet = null,
+    LocationFacetDto? LocationFacet = null,
+    JourneyFacetDto? JourneyFacet = null);
 
 /// <summary>
 /// Model-upgrade-resilient rejection & resolution tombstone (ADR-004, Kaede Finding 4).
