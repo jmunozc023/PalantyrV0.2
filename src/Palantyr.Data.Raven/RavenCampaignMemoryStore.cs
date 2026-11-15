@@ -294,10 +294,10 @@ public sealed class RavenCampaignMemoryStore : ICampaignMemoryStore
                     foreach (var wavFile in Directory.EnumerateFiles(campaignDir, "*.wav", SearchOption.AllDirectories))
                     {
                         if (discoveredPaths.Add(Path.GetFullPath(wavFile)))
-                        {
-                            var fileName = Path.GetFileName(wavFile);
-                            audioFilesToInclude.Add(($"audio/{fileName}", wavFile));
-                        }
+                            {
+                                var fileName = Path.GetFileName(wavFile);
+                                audioFilesToInclude.Add(($"audio/{fileName}", wavFile));
+                            }
                     }
                 }
 
