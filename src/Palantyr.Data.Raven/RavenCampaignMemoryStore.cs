@@ -807,6 +807,4 @@ public sealed record CampaignBackupDataPayload(
     DateTimeOffset ExportedAtUtc,
     CampaignDocument? Campaign,
     IReadOnlyList<SessionDocument> Sessions,
-    IReadOnlyList<MemoryEntityDocument> MemoryEntities,
-    IReadOnlyList<TranscriptSegmentDocument>? Transcripts = null,
-    IReadOnlyList<NeedsAttentionItem>? NeedsAttentionItems = null);
+    IReadOnlyList<MemoryEntityDocument> MemoryEntities);
