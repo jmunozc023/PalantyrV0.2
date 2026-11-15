@@ -2,11 +2,11 @@
   "profiles": {
     "Palantyr.Host": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:55645;http://localhost:55646"
+      "applicationUrl": "http://127.0.0.1:5179"
     }
   }
 }
